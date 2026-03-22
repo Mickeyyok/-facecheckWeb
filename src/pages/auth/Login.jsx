@@ -98,13 +98,9 @@ export default function Login() {
       setFaceDescriptor(Array.from(detection.descriptor)); // ได้ตัวเลข 128 ตัว!
       setFaceRegStep(3); // ทะลุไปหน้า Success!!
       setIsFaceRegistered(true);
-<<<<<<< HEAD
-    }, 5500);
-=======
     } else {
       setFaceStatus('หาใบหน้าไม่เจอครับ! ลองขยับมาสว่างๆ และมองตรงๆ ❌');
     }
->>>>>>> feature/face-scan
   };
 
   const handleAuthSubmit = async (e) => {

@@ -1,17 +1,14 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Camera, LayoutDashboard, BookOpen, History, Activity, Bell, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function MainLayout({ role }) {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   // ข้อมูลจำลองจำนวนการแจ้งเตือน (เดี๋ยวเชื่อม State จริงทีหลัง)
-  const unreadNotificationsCount = 2; 
-
-  const handleLogout = () => {
-    // ล้างข้อมูล Session แล้วกลับไปหน้า Login
-    navigate('/');
-  };
+  const unreadNotificationsCount = 2;
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-blue-100">
@@ -69,7 +66,7 @@ export default function MainLayout({ role }) {
         
         {/* เมนูออกจากระบบ */}
         <div className="p-4 border-t border-slate-800">
-          <button onClick={handleLogout} className="flex items-center space-x-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition">
+          <button onClick={logout} className="flex items-center space-x-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition">
             <LogOut size={20} /><span>ออกจากระบบ</span>
           </button>
         </div>
@@ -97,10 +94,10 @@ export default function MainLayout({ role }) {
 
             <div className="flex items-center space-x-3 pl-5 border-l border-slate-200">
               <span className="text-sm font-bold text-slate-700">
-                {role === 'student' ? 'กฤษณะ สุริยวงษ์' : 'อ. น้ำฝน อัศวเมฆิน'}
+                {user?.name}
               </span>
               <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${role === 'student' ? 'bg-blue-600' : 'bg-purple-600'}`}>
-                {role === 'student' ? 'ก' : 'น'}
+                {user?.name?.[0]}
               </div>
             </div>
           </div>

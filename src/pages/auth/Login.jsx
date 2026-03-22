@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Camera, User, Users, CheckCircle, X } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
-  const navigate = useNavigate();
+  const { login } = useAuth();
 
   // State สำหรับจัดการหน้าฟอร์ม
   const [authMode, setAuthMode] = useState('login'); // 'login', 'register'
@@ -29,14 +29,14 @@ export default function Login() {
 
   const handleAuthSubmit = (e) => {
     e.preventDefault();
-    // ถ้าเป็นนักศึกษาและกำลังสมัครสมาชิก แต่ยังไม่ได้ลงทะเบียนใบหน้า ให้เตือน
     if (authMode === 'register' && isStudent && !isFaceRegistered) {
       alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
       return;
     }
     
-    // สำเร็จ! ให้ Redirect (เปลี่ยนหน้า) ไปที่ Dashboard ตาม Role ที่เลือก
-    navigate(`/${authRole}/dashboard`);
+    // เรียกใช้ login โดยส่ง role และข้อมูลจำลองชื่อผู้ใช้ไป
+    const mockName = isStudent ? 'กฤษณะ สุริยวงษ์' : 'อ. น้ำฝน อัศวเมฆิน';
+    login(authRole, { name: mockName });
   };
 
   return (

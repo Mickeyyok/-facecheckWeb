@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, User, Users, CheckCircle, X } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
 
@@ -13,6 +14,7 @@ export default function Login() {
   // State สำหรับ Input และ API
   const [identifier, setIdentifier] = useState(''); // รหัสนักศึกษา หรือ อีเมลอาจารย์
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState(''); // ชื่อ-สกุล สำหรับสมัครสมาชิก
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -21,34 +23,128 @@ export default function Login() {
   const [faceRegStep, setFaceRegStep] = useState(0);
   const [isFaceRegistered, setIsFaceRegistered] = useState(false);
 
+  // State สำหรับ AI กล้อง
+  const videoRef = useRef(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [faceDescriptor, setFaceDescriptor] = useState(null); // ตัวเลข 128 ตัว
+  const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
+
+  // 1. โหลด AI Models
+  useEffect(() => {
+    const loadModels = async () => {
+      const MODEL_URL = '/models';
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        setModelsLoaded(true);
+      } catch (err) {
+        console.error("โหลดโมเดลไม่สำเร็จ:", err);
+      }
+    };
+    loadModels();
+  }, []);
+
+  // 2. จัดการเปิด/ปิดกล้องเมื่อ Modal แสดง
+  useEffect(() => {
+    let streamRef = null;
+    if (showFaceRegModal && faceRegStep === 1) {
+      navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
+        .then((stream) => { 
+            streamRef = stream;
+            if(videoRef.current) videoRef.current.srcObject = stream; 
+            setFaceStatus('มองตรงมาที่กล้อง ให้อยู่ในกรอบ 📸');
+        })
+        .catch((err) => {
+            console.error("เปิดกล้องไม่ได้:", err);
+            setFaceStatus('เปิดกล้องไม่ได้ กรุณาอนุญาตให้เว็บเข้าถึงกล้อง');
+        });
+    }
+    
+    return () => { // ปิดกล้องตอนปิด Modal / เปลี่ยน Step
+        if (streamRef) {
+            streamRef.getTracks().forEach(track => track.stop());
+        }
+    }
+  }, [showFaceRegModal, faceRegStep]);
+
   const isStudent = authRole === 'student';
 
   const handleStartFaceReg = () => {
     setShowFaceRegModal(true);
     setFaceRegStep(0);
-    setTimeout(() => setFaceRegStep(1), 1500); // ให้มองตรง
-    setTimeout(() => setFaceRegStep(2), 3500); // ให้หันซ้ายขวา
-    setTimeout(() => {
-      setFaceRegStep(3); // สำเร็จ
+    
+    if (!modelsLoaded) {
+       setFaceStatus('กำลังโหลด AI Models...');
+       setTimeout(() => setFaceRegStep(1), 1500);
+    } else {
+       setFaceRegStep(1); // เปิดกล้องเลย
+    }
+  };
+
+  // 3. ฟังก์ชันสแกนและดึง 128 ตัวเลข
+  const handleScanFace = async () => {
+    if (!modelsLoaded || !videoRef.current) return;
+    
+    setFaceStatus('รอก่อนนะครับ กำลังประมวลผลใบหน้า... ⏳');
+    const detection = await faceapi.detectSingleFace(
+      videoRef.current, 
+      new faceapi.TinyFaceDetectorOptions()
+    ).withFaceLandmarks().withFaceDescriptor();
+
+    if (detection) {
+      setFaceDescriptor(Array.from(detection.descriptor)); // ได้ตัวเลข 128 ตัว!
+      setFaceRegStep(3); // ทะลุไปหน้า Success!!
       setIsFaceRegistered(true);
-    }, 5500); 
+    } else {
+      setFaceStatus('หาใบหน้าไม่เจอครับ! ลองขยับมาสว่างๆ และมองตรงๆ ❌');
+    }
   };
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setError(''); // ล้าง Error เก่าก่อนทุกครั้ง
 
-    if (authMode === 'register' && isStudent && !isFaceRegistered) {
+    if (authMode === 'register' && isStudent && !faceDescriptor) {
       alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
       return;
     }
 
     try {
       setIsLoading(true);
-      // ยิง API ไปหา Spring Boot จริงๆ
-      const response = await authService.login(identifier, password);
-      // ถ้าสำเร็จ → เซ็ต user ใน AuthContext แล้วพาไป Dashboard
-      login(response.user.role, { name: response.user.fullName || response.user.name });
+      
+      if (authMode === 'register') {
+        // แอบสร้างอีเมลจำลองให้นักศึกษา เพื่อไม่ให้ Backend พัง (เพราะ DB บังคับใส่ Email)
+        const emailToSend = !isStudent ? identifier : `${identifier}@utcc.ac.th`;
+
+        const userData = {
+          role: authRole === 'instructor' ? 'teacher' : 'student',
+          email: emailToSend,
+          studentId: isStudent ? identifier : null,
+          password: password,
+          fullName: fullName,
+          faceDescriptor: faceDescriptor ? faceDescriptor : []
+        };
+        await authService.register(userData);
+        alert('สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ');
+        setAuthMode('login'); // กลับไปหน้า Login
+        setPassword(''); // เคลียร์รหัสผ่าน
+      } else {
+        // จัดข้อมูลตอน ล็อกอิน ตาม Role
+        let loginData = { password: password };
+        if (isStudent) {
+          loginData.studentId = identifier; // ถ้าเป็นนักศึกษา ส่งรหัสนักศึกษา
+        } else {
+          loginData.email = identifier; // ถ้าเป็นอาจารย์ ส่งอีเมล
+        }
+
+        // ยิง API ไปหา Spring Boot จริงๆ
+        const response = await authService.login(loginData);
+        // ถ้าสำเร็จ → เซ็ต user ใน AuthContext แล้วพาไป Dashboard
+        login(response.user.role, { name: response.user.fullName || response.user.name });
+      }
     } catch (err) {
       setError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
     } finally {
@@ -113,7 +209,7 @@ export default function Login() {
               {authMode === 'register' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่อ - สกุล</label>
-                  <input type="text" placeholder="เช่น นายกฤษณะ สุริยวงษ์" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="เช่น นายกฤษณะ สุริยวงษ์" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
                 </div>
               )}
 
@@ -190,16 +286,19 @@ export default function Login() {
                     <p className="font-bold tracking-wide">กำลังเตรียมกล้อง...</p>
                   </div>
                 )}
-                {(faceRegStep === 1 || faceRegStep === 2) && (
+                {faceRegStep === 1 && (
                   <>
-                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop" alt="Webcam" className="absolute inset-0 w-full h-full object-cover opacity-90 scale-105" />
+                    <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-90 scale-105" />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className={`w-48 h-64 border-[4px] rounded-[100px] transition-colors duration-500 ${faceRegStep === 1 ? 'border-blue-400 shadow-[0_0_30px_rgba(96,165,250,0.5)]' : 'border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.5)]'}`}></div>
+                      <div className="w-48 h-64 border-[4px] border-blue-400 rounded-[100px] shadow-[0_0_30px_rgba(96,165,250,0.5)]"></div>
                     </div>
-                    <div className="absolute bottom-8 left-0 w-full flex justify-center">
-                      <span className={`px-5 py-2.5 rounded-full text-sm font-black tracking-widest backdrop-blur-md shadow-xl border transition-colors duration-500 ${faceRegStep === 1 ? 'bg-blue-600/80 border-blue-400 text-white' : 'bg-amber-500/80 border-amber-300 text-amber-900'}`}>
-                        {faceRegStep === 1 ? 'มองตรงมาที่กล้อง' : 'หันหน้าซ้าย-ขวา ช้าๆ'}
+                    <div className="absolute bottom-6 w-full px-6 flex flex-col items-center z-10">
+                      <span className="px-5 py-2 rounded-full text-sm font-bold tracking-wide backdrop-blur-md shadow-lg border bg-blue-600/80 border-blue-400 text-white mb-3 text-center">
+                        {faceStatus}
                       </span>
+                      <button type="button" onClick={handleScanFace} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-full shadow-xl transition-all active:scale-95 w-full">
+                        สแกนใบหน้าเลย 📸
+                      </button>
                     </div>
                   </>
                 )}

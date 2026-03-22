@@ -5,6 +5,7 @@ import Login from './pages/auth/Login';
 import StudentDashboard from './pages/student/StudentDashboard';
 import StudentCourses from './pages/student/StudentCourses';
 import StudentHistory from './pages/student/StudentHistory';
+import FaceRegistration from './pages/student/FaceRegistration';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import Notifications from './pages/Notifications';
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
+      <Route path="/register-face" element={<FaceRegistration />} />
 
       {/* กลุ่มหน้าของ นักศึกษา (โดนล็อกด้วย ProtectedRoute) */}
       <Route element={<ProtectedRoute allowedRole="student" />}>

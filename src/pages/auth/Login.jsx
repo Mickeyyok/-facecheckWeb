@@ -31,7 +31,7 @@ export default function Login() {
     setTimeout(() => {
       setFaceRegStep(3); // สำเร็จ
       setIsFaceRegistered(true);
-    }, 5500); 
+    }, 5500);
   };
 
   const handleAuthSubmit = async (e) => {
@@ -57,15 +57,15 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans selection:bg-blue-100">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex overflow-hidden border border-slate-200 min-h-[600px] relative">
-        
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center font-sans selection:bg-blue-100">
+      <div className="bg-white w-full h-screen flex overflow-hidden relative">
+
         {/* Left Side: Branding */}
         <div className={`hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center relative overflow-hidden transition-colors duration-500 ${isStudent ? 'bg-blue-600' : 'bg-purple-600'}`}>
-          <Camera size={72} className="mb-6 text-white/90 drop-shadow-md relative z-10" strokeWidth={1.5} />
-          <h1 className="text-4xl font-extrabold mb-3 tracking-tight relative z-10">FaceCheck</h1>
+          <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="mb-6 w-45 h-45 object-contain relative z-10 drop-shadow-md" />
+          <h1 className="text-4xl font-extrabold mb-3 tracking-tight relative z-10">FaceCheck UTCC</h1>
           <p className="text-center text-white/80 text-[15px] font-medium relative z-10 leading-relaxed">
-            {authMode === 'login' 
+            {authMode === 'login'
               ? 'ระบบเช็กชื่อด้วยใบหน้าและพิกัด\nUTCC Smart System'
               : 'ลงทะเบียนใบหน้าครั้งเดียว\nใช้งานได้ตลอดไป ปลอดภัยและแม่นยำ'}
           </p>
@@ -73,37 +73,37 @@ export default function Login() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-black opacity-10 rounded-full blur-2xl -ml-10 -mb-10"></div>
         </div>
-        
+
         {/* Right Side: Form */}
         <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col bg-white overflow-y-auto relative justify-center">
           <div className="max-w-md w-full mx-auto animate-in fade-in duration-300">
-            
+
             {/* Header */}
-            <div className="mb-8 text-center md:text-left">
-              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+            <div className="mb-8 text-center md:text-md">
+              <h2 className="title-login font-default-40-48 mb-4">
                 {authMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชีใหม่'}
               </h2>
-              <p className="text-slate-500 mt-2 text-sm font-medium">
-                {authMode === 'login' ? 'ยินดีต้อนรับกลับสู่ FaceCheck' : 'ลงทะเบียนเพื่อเริ่มต้นใช้งานระบบ'}
+              <p className="subtitle-login font-default-20-32 ">
+                {authMode === 'login' ? 'โปรดป้อนรหัสประจำตัวและรหัสผ่าน' : 'ลงทะเบียนเพื่อเริ่มต้นใช้งานระบบ'}
               </p>
             </div>
 
             {/* Role Toggle */}
             <div className="flex p-1 bg-slate-100 rounded-xl mb-6 border border-slate-200">
-              <button 
+              <button
                 type="button"
                 onClick={() => setAuthRole('student')}
                 className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${isStudent ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                <User size={16} />
-                <span>นักศึกษา</span>
+                <User size={20} color={isStudent ? '#1a237e' : '#64748b'} />
+                <span style={isStudent ? { color: '#1a237e' } : {}}>นักศึกษา</span>
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setAuthRole('instructor')}
                 className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${!isStudent ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                <Users size={16} />
+                <Users size={20} />
                 <span>อาจารย์ผู้สอน</span>
               </button>
             </div>
@@ -122,13 +122,8 @@ export default function Login() {
                 <input type={isStudent ? 'text' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={isStudent ? 'เช่น 640001...' : 'instructor@utcc.ac.th'} required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
               </div>
 
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
-                <div className="flex justify-between items-end mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700">รหัสผ่าน</label>
-                  {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>ลืมรหัสผ่าน?</a>}
-                </div>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
-              </div>
+
+
 
               {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}
               {authMode === 'register' && isStudent && (
@@ -157,16 +152,38 @@ export default function Login() {
                 </p>
               )}
 
-              <button type="submit" disabled={isLoading} className={`w-full mt-2 py-3.5 rounded-xl font-bold text-white shadow-sm transition-all active:scale-95 flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed ${isStudent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}>
+              <button type="submit" disabled={isLoading}
+                className="w-full mt-2 py-3.5 rounded-xl font-bold text-white shadow-sm transition-all active:scale-95 flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed"
+                style={{ backgroundColor: '#1a237e' }}>
                 {isLoading ? 'กำลังตรวจสอบ...' : (authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก')}
               </button>
             </form>
 
             <div className="mt-6 text-center text-sm text-slate-500 animate-in fade-in duration-500">
               {authMode === 'login' ? (
-                <p>ยังไม่มีบัญชีใช่ไหม? <button type="button" onClick={() => { setAuthMode('register'); setIsFaceRegistered(false); }} className={`font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>สมัครสมาชิก</button></p>
+                <p>
+                  ยังไม่มีบัญชีใช่ไหม?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('register'); setIsFaceRegistered(false); }}
+                    className="font-bold hover:underline"
+                    style={{ color: '#1a237e' }}
+                  >
+                    สมัครสมาชิก
+                  </button>
+                </p>
               ) : (
-                <p>มีบัญชีอยู่แล้ว? <button type="button" onClick={() => setAuthMode('login')} className={`font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>เข้าสู่ระบบ</button></p>
+                <p>
+                  มีบัญชีอยู่แล้ว?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('login')}
+                    className="font-bold hover:underline"
+                    style={{ color: '#1a237e' }}
+                  >
+                    เข้าสู่ระบบ
+                  </button>
+                </p>
               )}
             </div>
 
@@ -178,11 +195,11 @@ export default function Login() {
       {showFaceRegModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20">
-            {faceRegStep !== 3 && <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1.5 transition-colors"><X size={24} strokeWidth={2.5}/></button>}
+            {faceRegStep !== 3 && <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1.5 transition-colors"><X size={24} strokeWidth={2.5} /></button>}
             <div className="p-10">
               <h3 className="text-[26px] font-black text-center mb-1 text-slate-800 tracking-tight">ลงทะเบียนใบหน้า</h3>
               <p className="text-center text-slate-500 font-medium text-sm mb-8">ขยับใบหน้าให้อยู่ในกรอบที่กำหนด</p>
-              
+
               <div className="bg-slate-900 aspect-[3/4] sm:aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-8 shadow-inner border border-slate-800">
                 {faceRegStep === 0 && (
                   <div className="flex flex-col items-center animate-pulse">
@@ -205,7 +222,7 @@ export default function Login() {
                 )}
                 {faceRegStep === 3 && (
                   <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="bg-white/20 p-5 rounded-full mb-4 shadow-lg backdrop-blur-sm"><CheckCircle size={56} className="text-white" strokeWidth={2.5}/></div>
+                    <div className="bg-white/20 p-5 rounded-full mb-4 shadow-lg backdrop-blur-sm"><CheckCircle size={56} className="text-white" strokeWidth={2.5} /></div>
                     <h4 className="text-4xl font-black text-white mb-2 tracking-tight">สำเร็จ!</h4>
                     <p className="text-emerald-50 font-bold">ระบบจดจำใบหน้าเรียบร้อย</p>
                   </div>

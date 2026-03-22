@@ -217,8 +217,13 @@ export default function Login() {
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">{isStudent ? 'รหัสนักศึกษา' : 'อีเมลมหาวิทยาลัย'}</label>
                 <input type={isStudent ? 'text' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={isStudent ? 'เช่น 640001...' : 'instructor@utcc.ac.th'} required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
               </div>
-
-
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
+                <div className="flex justify-between items-end mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700">รหัสผ่าน</label>
+                  {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>ลืมรหัสผ่าน?</a>}
+                </div>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+              </div>
 
 
               {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}

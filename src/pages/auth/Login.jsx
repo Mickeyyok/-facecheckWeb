@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Camera, User, Users, CheckCircle, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/authService';
 
 export default function Login() {
   const { login } = useAuth();
@@ -8,6 +9,12 @@ export default function Login() {
   // State สำหรับจัดการหน้าฟอร์ม
   const [authMode, setAuthMode] = useState('login'); // 'login', 'register'
   const [authRole, setAuthRole] = useState('student'); // 'student', 'instructor'
+
+  // State สำหรับ Input และ API
+  const [identifier, setIdentifier] = useState(''); // รหัสนักศึกษา หรือ อีเมลอาจารย์
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // State สำหรับลงทะเบียนใบหน้า (Face Registration)
   const [showFaceRegModal, setShowFaceRegModal] = useState(false);
@@ -27,16 +34,26 @@ export default function Login() {
     }, 5500); 
   };
 
-  const handleAuthSubmit = (e) => {
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
+    setError(''); // ล้าง Error เก่าก่อนทุกครั้ง
+
     if (authMode === 'register' && isStudent && !isFaceRegistered) {
       alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
       return;
     }
-    
-    // เรียกใช้ login โดยส่ง role และข้อมูลจำลองชื่อผู้ใช้ไป
-    const mockName = isStudent ? 'กฤษณะ สุริยวงษ์' : 'อ. น้ำฝน อัศวเมฆิน';
-    login(authRole, { name: mockName });
+
+    try {
+      setIsLoading(true);
+      // ยิง API ไปหา Spring Boot จริงๆ
+      const response = await authService.login(identifier, password);
+      // ถ้าสำเร็จ → เซ็ต user ใน AuthContext แล้วพาไป Dashboard
+      login(response.user.role, { name: response.user.fullName || response.user.name });
+    } catch (err) {
+      setError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -102,7 +119,7 @@ export default function Login() {
 
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-75">
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">{isStudent ? 'รหัสนักศึกษา' : 'อีเมลมหาวิทยาลัย'}</label>
-                <input type={isStudent ? 'text' : 'email'} placeholder={isStudent ? 'เช่น 640001...' : 'instructor@utcc.ac.th'} required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                <input type={isStudent ? 'text' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={isStudent ? 'เช่น 640001...' : 'instructor@utcc.ac.th'} required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
               </div>
 
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
@@ -110,7 +127,7 @@ export default function Login() {
                   <label className="block text-xs font-bold text-slate-700">รหัสผ่าน</label>
                   {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>ลืมรหัสผ่าน?</a>}
                 </div>
-                <input type="password" placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
               </div>
 
               {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}
@@ -133,8 +150,15 @@ export default function Login() {
                 </div>
               )}
 
-              <button type="submit" className={`w-full mt-6 py-3.5 rounded-xl font-bold text-white shadow-sm transition-all active:scale-95 flex justify-center items-center ${isStudent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}>
-                {authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+              {/* แสดง Error จาก Backend */}
+              {error && (
+                <p className="text-red-500 text-sm font-medium text-center bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 animate-in fade-in">
+                  {error}
+                </p>
+              )}
+
+              <button type="submit" disabled={isLoading} className={`w-full mt-2 py-3.5 rounded-xl font-bold text-white shadow-sm transition-all active:scale-95 flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed ${isStudent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}>
+                {isLoading ? 'กำลังตรวจสอบ...' : (authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก')}
               </button>
             </form>
 

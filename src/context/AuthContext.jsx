@@ -10,8 +10,18 @@ export const AuthProvider = ({ children }) => {
 
   // ฟังก์ชันล็อกอิน
   const login = (role, userData) => {
-    setUser({ role, ...userData });
-    navigate(`/${role}/dashboard`); // ล็อกอินสำเร็จให้เด้งไปหน้า Dashboard ของ Role นั้น
+    // Normalize: แปลง role จาก Backend ให้ตรงกับที่ Frontend ใช้
+    // เช่น 'teacher' → 'instructor', 'STUDENT' → 'student'
+    const roleMap = {
+      teacher: 'instructor',
+      TEACHER: 'instructor',
+      INSTRUCTOR: 'instructor',
+      STUDENT: 'student',
+    };
+    const normalizedRole = roleMap[role] ?? role; // ถ้าไม่มีใน Map ให้ใช้ค่าเดิม
+
+    setUser({ role: normalizedRole, ...userData });
+    navigate(`/${normalizedRole}/dashboard`);
   };
 
   // ฟังก์ชันออกจากระบบ

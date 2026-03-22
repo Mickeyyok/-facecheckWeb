@@ -37,6 +37,12 @@ export default function App() {
           <Route path="notifications" element={<Notifications role="instructor" />} />
         </Route>
       </Route>
+      {/* Alias: ถ้า Spring Boot ส่ง role='teacher' กลับมา ให้ Redirect ไปหน้าอาจารย์ */}
+      <Route path="/teacher" element={<Navigate to="/instructor" replace />} />
+      <Route path="/teacher/*" element={<Navigate to="/instructor" replace />} />
+
+      {/* Catch-all: URL ใดๆ ที่ไม่มีอยู่จริง ให้เด้งกลับหน้า Login */}
+      <Route path="*" element={<Navigate to="/" replace />} />
       
     </Routes>
   );

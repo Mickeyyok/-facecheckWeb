@@ -14,6 +14,7 @@ export default function Login() {
   // State สำหรับ Input และ API
   const [identifier, setIdentifier] = useState(''); // รหัสนักศึกษา หรือ อีเมลอาจารย์
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // ยืนยันรหัสผ่าน
   const [fullName, setFullName] = useState(''); // ชื่อ-สกุล สำหรับสมัครสมาชิก
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -103,13 +104,34 @@ export default function Login() {
     }
   };
 
+  // ตรวจสอบความแข็งแรงรหัสผ่าน
+  const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setError(''); // ล้าง Error เก่าก่อนทุกครั้ง
 
-    if (authMode === 'register' && isStudent && !faceDescriptor) {
-      alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
-      return;
+    if (authMode === 'register') {
+      // ตรวจสอบรหัสนักศึกษา 13 หลัก
+      if (isStudent && !/^\d{13}$/.test(identifier)) {
+        setError('รหัสนักศึกษาต้องเป็นตัวเลข 13 หลักเท่านั้น');
+        return;
+      }
+      // ตรวจสอบความแข็งแรงรหัสผ่าน
+      if (!passwordRegex.test(password)) {
+        setError('รหัสผ่านต้องมีอย่างน้อย 8 ตัว มีพิมพ์ใหญ่อย่างน้อย 1 ตัว และอักษรพิเศษอย่างน้อย 1 ตัว');
+        return;
+      }
+      // ตรวจสอบรหัสผ่านตรงกัน
+      if (password !== confirmPassword) {
+        setError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
+        return;
+      }
+      // ตรวจสอบ Face ID สำหรับนักศึกษา
+      if (isStudent && !faceDescriptor) {
+        alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
+        return;
+      }
     }
 
     try {
@@ -131,6 +153,7 @@ export default function Login() {
         alert('สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ');
         setAuthMode('login'); // กลับไปหน้า Login
         setPassword(''); // เคลียร์รหัสผ่าน
+        setConfirmPassword('');
       } else {
         // จัดข้อมูลตอน ล็อกอิน ตาม Role
         let loginData = { password: password };
@@ -215,7 +238,33 @@ export default function Login() {
 
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-75">
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">{isStudent ? 'รหัสนักศึกษา' : 'อีเมลมหาวิทยาลัย'}</label>
-                <input type={isStudent ? 'text' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={isStudent ? 'เช่น 640001...' : 'instructor@utcc.ac.th'} required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                {isStudent ? (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={identifier}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 13);
+                      setIdentifier(val);
+                    }}
+                    placeholder="กรอกเลข 13 หลัก"
+                    maxLength={13}
+                    required
+                    className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`}
+                  />
+                ) : (
+                  <input
+                    type="email"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="instructor@utcc.ac.th"
+                    required
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm focus:border-purple-500 focus:ring-purple-200"
+                  />
+                )}
+                {authMode === 'register' && isStudent && (
+                  <p className="text-xs text-slate-400 mt-1">กรอกได้เฉพาะตัวเลข 13 หลัก</p>
+                )}
               </div>
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
                 <div className="flex justify-between items-end mb-1.5">
@@ -223,7 +272,37 @@ export default function Login() {
                   {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>ลืมรหัสผ่าน?</a>}
                 </div>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                {authMode === 'register' && (
+                  <p className="text-xs text-slate-400 mt-1">ต้องมีอย่างน้อย 8 ตัว, พิมพ์ใหญ่ 1 ตัว และอักษรพิเศษ 1 ตัว (เช่น !@#$)</p>
+                )}
               </div>
+
+              {/* ช่องยืนยันรหัสผ่าน (แสดงเฉพาะตอนสมัครสมาชิก) */}
+              {authMode === 'register' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-200">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">ยืนยันรหัสผ่าน</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className={`w-full px-4 py-3 rounded-xl border transition-all text-sm tracking-widest focus:outline-none focus:ring-2 ${
+                      confirmPassword && confirmPassword !== password
+                        ? 'border-red-400 focus:ring-red-200 bg-red-50'
+                        : confirmPassword && confirmPassword === password
+                        ? 'border-green-400 focus:ring-green-200 bg-green-50'
+                        : `border-slate-300 bg-white ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`
+                    }`}
+                  />
+                  {confirmPassword && confirmPassword !== password && (
+                    <p className="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
+                  )}
+                  {confirmPassword && confirmPassword === password && (
+                    <p className="text-xs text-green-600 mt-1">✓ รหัสผ่านตรงกัน</p>
+                  )}
+                </div>
+              )}
 
 
               {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}

@@ -54,20 +54,20 @@ export default function Login() {
     if (showFaceRegModal && faceRegStep === 1) {
       navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
         .then((stream) => { 
-            streamRef = stream;
-            if(videoRef.current) videoRef.current.srcObject = stream; 
-            setFaceStatus('มองตรงมาที่กล้อง ให้อยู่ในกรอบ 📸');
+          streamRef = stream;
+          if(videoRef.current) videoRef.current.srcObject = stream; 
+          setFaceStatus('กรุณามองตรงมาที่กล้อง ให้อยู่ในกรอบ ');
         })
         .catch((err) => {
-            console.error("เปิดกล้องไม่ได้:", err);
-            setFaceStatus('เปิดกล้องไม่ได้ กรุณาอนุญาตให้เว็บเข้าถึงกล้อง');
+          console.error("เปิดกล้องไม่ได้:", err);
+          setFaceStatus('เปิดกล้องไม่ได้ กรุณาอนุญาตให้เว็บเข้าถึงกล้อง');
         });
     }
     
     return () => { // ปิดกล้องตอนปิด Modal / เปลี่ยน Step
-        if (streamRef) {
-            streamRef.getTracks().forEach(track => track.stop());
-        }
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+      }
     }
   }, [showFaceRegModal, faceRegStep]);
 
@@ -89,7 +89,7 @@ export default function Login() {
   const handleScanFace = async () => {
     if (!modelsLoaded || !videoRef.current) return;
     
-    setFaceStatus('รอก่อนนะครับ กำลังประมวลผลใบหน้า... ⏳');
+    setFaceStatus('กำลังประมวลผลใบหน้า... ⏳');
     const detection = await faceapi.detectSingleFace(
       videoRef.current, 
       new faceapi.TinyFaceDetectorOptions()
@@ -100,7 +100,7 @@ export default function Login() {
       setFaceRegStep(3); // ทะลุไปหน้า Success!!
       setIsFaceRegistered(true);
     } else {
-      setFaceStatus('หาใบหน้าไม่เจอครับ! ลองขยับมาสว่างๆ และมองตรงๆ ❌');
+      setFaceStatus('หาใบหน้าไม่เจอ! ลองขยับมาใกล้ๆ และมองตรง');
     }
   };
 
@@ -186,7 +186,7 @@ export default function Login() {
           <p className="text-center text-white/80 text-[15px] font-medium relative z-10 leading-relaxed">
             {authMode === 'login'
               ? 'ระบบเช็กชื่อด้วยใบหน้าและพิกัด\nUTCC Smart System'
-              : 'ลงทะเบียนใบหน้าครั้งเดียว\nใช้งานได้ตลอดไป ปลอดภัยและแม่นยำ'}
+              : 'กรุณาลงทะเบียนเเละสเเกนใบหน้าเพื่อใช้งานระบบ'}
           </p>
           {/* พื้นหลังตกแต่ง */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
@@ -232,7 +232,7 @@ export default function Login() {
               {authMode === 'register' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่อ - สกุล</label>
-                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="เช่น นายกฤษณะ สุริยวงษ์" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="เช่น นาย กฤษณะ สุริยวงษ์" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
                 </div>
               )}
 
@@ -263,7 +263,7 @@ export default function Login() {
                   />
                 )}
                 {authMode === 'register' && isStudent && (
-                  <p className="text-xs text-slate-400 mt-1">กรอกได้เฉพาะตัวเลข 13 หลัก</p>
+                  <p className="text-xs text-slate-400 mt-1">กรอกเฉพาะตัวเลข 13 หลัก</p>
                 )}
               </div>
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
@@ -303,7 +303,6 @@ export default function Login() {
                   )}
                 </div>
               )}
-
 
               {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}
               {authMode === 'register' && isStudent && (
@@ -380,26 +379,19 @@ export default function Login() {
               <h3 className="text-[26px] font-black text-center mb-1 text-slate-800 tracking-tight">ลงทะเบียนใบหน้า</h3>
               <p className="text-center text-slate-500 font-medium text-sm mb-8">ขยับใบหน้าให้อยู่ในกรอบที่กำหนด</p>
 
-              <div className="bg-slate-900 aspect-[3/4] sm:aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-8 shadow-inner border border-slate-800">
+              <div className="bg-slate-900 aspect-[3/4] sm:aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-6 shadow-inner border border-slate-800">
                 {faceRegStep === 0 && (
                   <div className="flex flex-col items-center animate-pulse">
                     <div className="bg-blue-500/20 p-5 rounded-full mb-4 shadow-[0_0_20px_rgba(59,130,246,0.3)]"><Camera size={40} className="text-blue-400" /></div>
                     <p className="font-bold tracking-wide">กำลังเตรียมกล้อง...</p>
                   </div>
-                )}
+                )
+                }
                 {faceRegStep === 1 && (
                   <>
                     <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-90 scale-105" />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-48 h-64 border-[4px] border-blue-400 rounded-[100px] shadow-[0_0_30px_rgba(96,165,250,0.5)]"></div>
-                    </div>
-                    <div className="absolute bottom-6 w-full px-6 flex flex-col items-center z-10">
-                      <span className="px-5 py-2 rounded-full text-sm font-bold tracking-wide backdrop-blur-md shadow-lg border bg-blue-600/80 border-blue-400 text-white mb-3 text-center">
-                        {faceStatus}
-                      </span>
-                      <button type="button" onClick={handleScanFace} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-full shadow-xl transition-all active:scale-95 w-full">
-                        สแกนใบหน้าเลย 📸
-                      </button>
                     </div>
                   </>
                 )}
@@ -412,7 +404,19 @@ export default function Login() {
                 )}
               </div>
 
-              {faceRegStep === 3 && <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#2b4cdd] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">ดำเนินการต่อ</button>}
+              {/* ส่วนที่ย้ายออกมาด้านนอกกรอบกล้อง */}
+              {faceRegStep === 1 && (
+                <div className="flex flex-col items-center mb-4">
+                  <div className="w-full px-5 py-3 rounded-xl text-sm font-bold tracking-wide bg-blue-50 text-[#1a237e] border border-blue-200 mb-3 text-center shadow-sm">
+                    {faceStatus}
+                  </div>
+                  <button type="button" onClick={handleScanFace} className="bg-[#1a237e] hover:opacity-90 text-white font-bold py-3 px-8 rounded-2xl shadow-xl transition-all active:scale-95 w-full text-lg">
+                    สแกนใบหน้า
+                  </button>
+                </div>
+              )}
+
+              {faceRegStep === 3 && <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#1a237e] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">ดำเนินการต่อ</button>}
             </div>
           </div>
         </div>

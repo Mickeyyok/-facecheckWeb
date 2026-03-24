@@ -29,6 +29,8 @@ export default function Login() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [faceDescriptor, setFaceDescriptor] = useState(null); // ตัวเลข 128 ตัว
   const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
+  // State สำหรับแสดง Modal สมัครสมาชิกสำเร็จ
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // 1. โหลด AI Models
   useEffect(() => {
@@ -89,7 +91,7 @@ export default function Login() {
   const handleScanFace = async () => {
     if (!modelsLoaded || !videoRef.current) return;
     
-    setFaceStatus('กำลังประมวลผลใบหน้า... ⏳');
+    setFaceStatus('กำลังประมวลผลใบหน้า....');
     const detection = await faceapi.detectSingleFace(
       videoRef.current, 
       new faceapi.TinyFaceDetectorOptions()
@@ -150,10 +152,8 @@ export default function Login() {
           faceDescriptor: faceDescriptor ? faceDescriptor : []
         };
         await authService.register(userData);
-        alert('สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ');
-        setAuthMode('login'); // กลับไปหน้า Login
-        setPassword(''); // เคลียร์รหัสผ่าน
-        setConfirmPassword('');
+        // เมื่อสมัครสำเร็จ ให้เปิด Modal แทน alert
+        setShowSuccessModal(true);
       } else {
         // จัดข้อมูลตอน ล็อกอิน ตาม Role
         let loginData = { password: password };
@@ -418,6 +418,39 @@ export default function Login() {
 
               {faceRegStep === 3 && <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#1a237e] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">ดำเนินการต่อ</button>}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal สมัครสมาชิกสำเร็จ */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl relative p-8 text-center animate-in zoom-in-95 duration-300">
+            <div className="w-24 h-24 rounded-full mx-auto flex items-center justify-center mb-6 bg-green-50 text-green-500 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+              <CheckCircle size={48} strokeWidth={2.5} />
+            </div>
+            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
+              สมัครสมาชิกสำเร็จ!
+            </h3>
+            <p className="text-slate-500 font-medium mb-8 text-sm leading-relaxed">
+              บัญชีของคุณถูกสร้างเรียบร้อยแล้ว <br /> 
+              กรุณาเข้าสู่ระบบเพื่อเริ่มต้นใช้งาน FaceCheck
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSuccessModal(false);
+                setAuthMode('login');
+                setPassword('');
+                setConfirmPassword('');
+                setIsFaceRegistered(false);
+                setFaceDescriptor(null); 
+              }}
+              className="w-full text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-95 text-lg hover:opacity-90"
+              style={{ backgroundColor: '#1a237e' }}
+            >
+              ไปหน้าเข้าสู่ระบบ
+            </button>
           </div>
         </div>
       )}

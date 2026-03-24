@@ -29,6 +29,7 @@ export default function Login() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [faceDescriptor, setFaceDescriptor] = useState(null); // ตัวเลข 128 ตัว
   const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
+  
   // State สำหรับแสดง Modal สมัครสมาชิกสำเร็จ
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -152,6 +153,7 @@ export default function Login() {
           faceDescriptor: faceDescriptor ? faceDescriptor : []
         };
         await authService.register(userData);
+        
         // เมื่อสมัครสำเร็จ ให้เปิด Modal แทน alert
         setShowSuccessModal(true);
       } else {
@@ -180,7 +182,7 @@ export default function Login() {
       <div className="bg-white w-full h-screen flex overflow-hidden relative">
 
         {/* Left Side: Branding */}
-        <div className={`hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center relative overflow-hidden transition-colors duration-500 ${isStudent ? 'bg-blue-600' : 'bg-purple-600'}`}>
+        <div className={`hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center relative overflow-hidden transition-colors duration-500 bg-[#1a237e] `}>
           <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="mb-6 w-45 h-45 object-contain relative z-10 drop-shadow-md" />
           <h1 className="text-4xl font-extrabold mb-3 tracking-tight relative z-10">FaceCheck UTCC</h1>
           <p className="text-center text-white/80 text-[15px] font-medium relative z-10 leading-relaxed">
@@ -220,10 +222,10 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setAuthRole('instructor')}
-                className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${!isStudent ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${!isStudent ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                <Users size={20} />
-                <span>อาจารย์ผู้สอน</span>
+                <Users size={20} color={!isStudent ? '#1a237e' : '#64748b'} />
+                <span style={!isStudent ? { color: '#1a237e' } : {}}>อาจารย์ผู้สอน</span>
               </button>
             </div>
 
@@ -269,7 +271,7 @@ export default function Login() {
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
                 <div className="flex justify-between items-end mb-1.5">
                   <label className="block text-xs font-bold text-slate-700">รหัสผ่าน</label>
-                  {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline ${isStudent ? 'text-blue-600' : 'text-purple-600'}`}>ลืมรหัสผ่าน?</a>}
+                  {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline text-[#1a237e]`}>ลืมรหัสผ่าน?</a>}
                 </div>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
                 {authMode === 'register' && (
@@ -446,14 +448,14 @@ export default function Login() {
                 setIsFaceRegistered(false);
                 setFaceDescriptor(null); 
               }}
-              className="w-full text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-95 text-lg hover:opacity-90"
-              style={{ backgroundColor: '#1a237e' }}
+              className="w-full text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-95 text-lg hover:opacity-90 bg-[#1a237e]"
             >
               ไปหน้าเข้าสู่ระบบ
             </button>
           </div>
         </div>
       )}
+
     </div>
   );
 }

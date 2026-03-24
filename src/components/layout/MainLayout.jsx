@@ -16,7 +16,7 @@ export default function MainLayout({ role }) {
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-20">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
-          <Camera className="text-blue-400" size={28} />
+          <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="w-10 h-10 object-contain relative z-10 drop-shadow-sm inline-block alignment-adjust" />
           <span className="text-xl font-bold tracking-wide">FaceCheck</span>
         </div>
         
@@ -24,7 +24,7 @@ export default function MainLayout({ role }) {
           {/* เมนูหน้าหลัก */}
           <NavLink 
             to={`/${role}/dashboard`} 
-            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <LayoutDashboard size={20} /><span>{role === 'student' ? 'หน้าหลัก' : 'จัดการรายวิชา'}</span>
           </NavLink>
@@ -33,7 +33,7 @@ export default function MainLayout({ role }) {
           {role === 'student' && (
             <NavLink 
               to="/student/courses" 
-              className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               <BookOpen size={20} /><span>รายวิชาของฉัน</span>
             </NavLink>
@@ -42,7 +42,7 @@ export default function MainLayout({ role }) {
           {/* เมนูประวัติ / แดชบอร์ดคลาส */}
           <NavLink 
             to={`/${role === 'student' ? 'student/history' : 'instructor/course/SP344'}`} 
-            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             {role === 'student' ? <History size={20} /> : <Activity size={20} />}
             <span>{role === 'student' ? 'ประวัติการเข้าเรียน' : 'แดชบอร์ดคลาส'}</span>
@@ -51,7 +51,7 @@ export default function MainLayout({ role }) {
           {/* เมนูแจ้งเตือน */}
           <NavLink 
             to={`/${role}/notifications`} 
-            className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <div className="flex items-center space-x-3">
               <Bell size={20} /><span>การแจ้งเตือน</span>

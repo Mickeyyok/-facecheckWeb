@@ -34,11 +34,17 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRole="instructor" />}>
         <Route path="/instructor" element={<MainLayout role="instructor" />}>
           <Route index element={<Navigate to="dashboard" replace />} />
+          
+          {/* เปลี่ยนกลับมาใช้ InstructorDashboard ของคุณที่มีอยู่แล้ว */}
           <Route path="dashboard" element={<InstructorDashboard />} />
+
+          {/* ลบ Route manage-subjects ออก เพราะเราใช้ InstructorDashboard แทนแล้ว */}
+          
           <Route path="course/:courseId" element={<InstructorCourseDetail />} />
           <Route path="notifications" element={<Notifications role="instructor" />} />
         </Route>
       </Route>
+      
       {/* Alias: ถ้า Spring Boot ส่ง role='teacher' กลับมา ให้ Redirect ไปหน้าอาจารย์ */}
       <Route path="/teacher" element={<Navigate to="/instructor" replace />} />
       <Route path="/teacher/*" element={<Navigate to="/instructor" replace />} />

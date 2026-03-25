@@ -1,38 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { notificationService } from '../services/notificationService';
 
 export default function Notifications({ role }) {
-  // ข้อมูลจำลองการแจ้งเตือน (แยกตาม Role)
-  const initialStudentNotes = [
-    { id: 1, type: 'warning', title: 'แจ้งเตือนการเข้าเรียน', message: 'คุณมาสายวิชา SP344 Software Engineering (19 มี.ค. 2026)', time: '2 ชั่วโมงที่แล้ว', isRead: false },
-    { id: 2, type: 'danger', title: '🤖 AI Alert: ความเสี่ยงการเข้าเรียน', message: 'คุณมีอัตราการมาสายเพิ่มขึ้นในวิชา SP344 โปรดบริหารเวลาเพื่อไม่ให้กระทบคะแนนเข้าเรียน', time: '3 วันที่แล้ว', isRead: true },
-  ];
-
-  const initialInstructorNotes = [
-    { id: 1, type: 'warning', title: '🤖 AI Alert: ความเสี่ยงนักศึกษา', message: 'มีนักศึกษา 1 คนในวิชา SP344 มีสถิติขาดเรียนเกิน 20% แนะนำให้ส่งข้อความแจ้งเตือน', time: '3 ชั่วโมงที่แล้ว', isRead: false },
-  ];
-
-  const [notifications, setNotifications] = useState(role === 'student' ? initialStudentNotes : initialInstructorNotes);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [notificationToDelete, setNotificationToDelete] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchNotifications();
+    }
+  }, [user]);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await notificationService.getUserNotifications(user.id);
+      
+      // แปลงข้อมูล createdAt ให้เป็น time แบบอ่านง่าย
+      const formattedData = data.map(n => {
+        const date = new Date(n.createdAt);
+        return {
+          ...n,
+          time: date.toLocaleString('th-TH', { 
+            day: 'numeric', month: 'short', year: 'numeric', 
+            hour: '2-digit', minute: '2-digit' 
+          }) // เช่น "24 มี.ค. 2569 23:45"
+        };
+      });
+      
+      setNotifications(formattedData);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ฟังก์ชันทำเครื่องหมายว่าอ่านแล้วทั้งหมด
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead(user.id);
+      setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
   };
 
   // ฟังก์ชันกดดูรายละเอียด (และตั้งค่าให้อ่านแล้ว)
-  const handleViewNotification = (note) => {
+  const handleViewNotification = async (note) => {
     setSelectedNotification(note); 
     if (!note.isRead) {
-      setNotifications(notifications.map(n => n.id === note.id ? { ...n, isRead: true } : n));
+      try {
+        await notificationService.markAsRead(note.id);
+        setNotifications(notifications.map(n => n.id === note.id ? { ...n, isRead: true } : n));
+      } catch (error) {
+        console.error('Error marking as read:', error);
+      }
     }
   };
 
   // ฟังก์ชันลบการแจ้งเตือน
-  const confirmDelete = () => {
-    setNotifications(notifications.filter(n => n.id !== notificationToDelete.id));
-    setNotificationToDelete(null);
+  const confirmDelete = async () => {
+    try {
+      await notificationService.deleteNotification(notificationToDelete.id);
+      setNotifications(notifications.filter(n => n.id !== notificationToDelete.id));
+      setNotificationToDelete(null);
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
   };
 
   return (

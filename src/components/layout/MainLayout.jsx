@@ -1,14 +1,23 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Camera, LayoutDashboard, BookOpen, History, Activity, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { notificationService } from '../../services/notificationService';
 
 export default function MainLayout({ role }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // ข้อมูลจำลองจำนวนการแจ้งเตือน (เดี๋ยวเชื่อม State จริงทีหลัง)
-  const unreadNotificationsCount = 2;
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.id) {
+      notificationService.getUserNotifications(user.id).then(data => {
+        const unreadCount = data.filter(n => !n.isRead).length;
+        setUnreadNotificationsCount(unreadCount);
+      }).catch(err => console.error(err));
+    }
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-blue-100">

@@ -168,7 +168,7 @@ export default function Login() {
         // ยิง API ไปหา Spring Boot จริงๆ
         const response = await authService.login(loginData);
         // ถ้าสำเร็จ → เซ็ต user ใน AuthContext แล้วพาไป Dashboard
-        login(response.user.role, { name: response.user.fullName || response.user.name });
+        login(response.user.role, { id: response.user.id, name: response.user.fullName || response.user.name });
       }
     } catch (err) {
       setError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');

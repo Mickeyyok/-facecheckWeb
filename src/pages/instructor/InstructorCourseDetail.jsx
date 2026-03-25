@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock, 
   Target, AlertTriangle, Search, Plus, Trash2, Calendar, BarChart2, 
-  Brain, Sparkles, Mail, XCircle 
+  Brain, Sparkles, Mail, XCircle, Users 
 } from 'lucide-react';
+import { classService } from '../../services/classService';
+import { useAuth } from '../../context/AuthContext';
 
 // Component ป้ายสถานะ
 const StatusBadge = ({ status }) => {
@@ -15,26 +17,108 @@ const StatusBadge = ({ status }) => {
 };
 
 export default function InstructorCourseDetail() {
-  const { courseId } = useParams(); // ดึงรหัสวิชาจาก URL (เช่น SP344)
+  const { courseId } = useParams(); // ดึง UUID ของคลาสจาก URL
   const navigate = useNavigate();
-  const [courseSubTab, setCourseSubTab] = useState('info'); // 'info', 'students', 'daily', 'term', 'alerts'
+  const { user } = useAuth();
+  const [courseSubTab, setCourseSubTab] = useState('info');
+  const [loadingCourse, setLoadingCourse] = useState(true);
 
-  // --- ข้อมูลจำลอง ---
+  // --- ข้อมูลวิชา (ดึงจาก API) ---
   const [courseInfo, setCourseInfo] = useState({
-    name: 'Software Engineering',
-    code: courseId || 'SP344',
-    instructor: 'อ. น้ำฝน อัศวเมฆิน',
-    room: '21509',
+    name: '',
+    code: '',
+    instructor: user?.name || '',
+    room: '',
     term: '2568 / 1'
   });
 
-  const [studentList, setStudentList] = useState([
-    { id: '640001', name: 'นายกฤษณะ สุริยวงษ์', status: 'present', time: '09:00', aiRisk: 'low', absentCount: 0 },
-    { id: '640002', name: 'นายวนนนท์ แสงทอง', status: 'absent', time: '-', aiRisk: 'high', absentCount: 3 },
-    { id: '640003', name: 'นายคฑาพงษ์ มากรุง', status: 'late', time: '09:25', aiRisk: 'low', absentCount: 0 },
-    { id: '640004', name: 'นางสาววิไลวรรณ รักดี', status: 'present', time: '08:50', aiRisk: 'low', absentCount: 1 },
-    { id: '640005', name: 'นายสมชาย มุ่งมั่น', status: 'late', time: '09:18', aiRisk: 'medium', absentCount: 2 },
-  ]);
+  // ดึงข้อมูลคลาสจาก API ตอนเปิดหน้า
+  useEffect(() => {
+    const fetchCourse = async () => {
+      try {
+        setLoadingCourse(true);
+        const data = await classService.getClassById(courseId);
+        setCourseInfo({
+          name: data.subjectName || '',
+          code: data.subjectCode || '',
+          instructor: user?.name || '',
+          room: data.room || '',
+          term: '2568 / 1'
+        });
+        // อัพเดทเวลาถ้ามี
+        if (data.startTime || data.endTime) {
+          const start = data.startTime ? data.startTime.substring(0, 5) : '09:00';
+          const lateMin = data.lateThresholdMinutes || 15;
+          const absentMin = lateMin * 2;
+          // คำนวณเวลาสาย/ขาด จาก startTime + threshold
+          const [h, m] = start.split(':').map(Number);
+          const lateTotal = h * 60 + m + lateMin;
+          const absentTotal = h * 60 + m + absentMin;
+          const lateFmt = `${String(Math.floor(lateTotal / 60)).padStart(2, '0')}:${String(lateTotal % 60).padStart(2, '0')}`;
+          const absentFmt = `${String(Math.floor(absentTotal / 60)).padStart(2, '0')}:${String(absentTotal % 60).padStart(2, '0')}`;
+          setCourseTimeSettings({ start, late: lateFmt, absent: absentFmt });
+        }
+      } catch (error) {
+        console.error('ดึงข้อมูลคลาสไม่สำเร็จ:', error);
+      } finally {
+        setLoadingCourse(false);
+      }
+    };
+    if (courseId) fetchCourse();
+  }, [courseId]);
+
+  const [studentList, setStudentList] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [addStudentId, setAddStudentId] = useState(''); // รหัสนักศึกษาที่จะเพิ่ม
+  const [addingStudent, setAddingStudent] = useState(false);
+
+  // ดึงรายชื่อนักศึกษาจาก API
+  useEffect(() => {
+    if (courseId) fetchStudents();
+  }, [courseId]);
+
+  const fetchStudents = async () => {
+    try {
+      setLoadingStudents(true);
+      const data = await classService.getStudentsByClass(courseId);
+      setStudentList(data);
+    } catch (error) {
+      console.error('ดึงรายชื่อนักศึกษาไม่สำเร็จ:', error);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // เพิ่มนักศึกษาเข้าคลาส
+  const handleAddStudent = async () => {
+    if (!addStudentId.trim()) {
+      alert('กรุณากรอกรหัสนักศึกษา');
+      return;
+    }
+    try {
+      setAddingStudent(true);
+      await classService.addStudentToClass(courseId, addStudentId.trim());
+      setAddStudentId('');
+      setShowAddStudentModal(false);
+      await fetchStudents(); // โหลดใหม่
+    } catch (error) {
+      alert(error.response?.data?.message || 'เพิ่มนักศึกษาไม่สำเร็จ');
+    } finally {
+      setAddingStudent(false);
+    }
+  };
+
+  // ลบนักศึกษาออกจากคลาส
+  const handleDeleteStudent = async () => {
+    if (!studentToDelete) return;
+    try {
+      await classService.removeStudentFromClass(courseId, studentToDelete.studentUserId);
+      setStudentToDelete(null);
+      await fetchStudents();
+    } catch (error) {
+      alert(error.response?.data?.message || 'ลบนักศึกษาไม่สำเร็จ');
+    }
+  };
 
   const [riskAlerts, setRiskAlerts] = useState([
     { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' },
@@ -46,6 +130,7 @@ export default function InstructorCourseDetail() {
   const [editCourseForm, setEditCourseForm] = useState(courseInfo);
 
   const [courseTimeSettings, setCourseTimeSettings] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
+  const [editTimeForm, setEditTimeForm] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
   const [locationSettings, setLocationSettings] = useState({ name: 'อาคาร 21 ชั้น 5 ห้อง 21509', lat: '13.777045', lng: '100.556021', radius: 50 });
   const [editLocationForm, setEditLocationForm] = useState(locationSettings);
 
@@ -62,10 +147,15 @@ export default function InstructorCourseDetail() {
   const [alertToDelete, setAlertToDelete] = useState(null);
 
   // --- ฟังก์ชัน ---
-  const handleCancelClass = () => {
-    setIsClassCanceled(true);
-    setShowCancelClassConfirm(false);
-    alert('ระบบปิดการสแกนหน้าและส่งแจ้งเตือนให้นักศึกษาแล้ว');
+  const handleCancelClass = async () => {
+    try {
+      await classService.notifyCancelClass(courseId);
+      setIsClassCanceled(true);
+      setShowCancelClassConfirm(false);
+      alert('ระบบปิดการสแกนหน้าและส่งแจ้งเตือนให้นักศึกษาในคลาสนี้แล้ว');
+    } catch (error) {
+      alert(error.response?.data?.message || 'ไม่สามารถส่งแจ้งเตือนรับยกคลาสได้');
+    }
   };
 
   const handleSendAlertToStudent = () => {
@@ -87,7 +177,7 @@ export default function InstructorCourseDetail() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6">
             <div>
               <h3 className="text-2xl font-bold mb-1">{courseInfo.code} {courseInfo.name}</h3>
-              <p className="text-slate-400 flex items-center text-sm"><MapPin size={16} className="mr-2"/> ห้อง {courseInfo.room} | 09:00 - 12:00 น.</p>
+              <p className="text-slate-400 flex items-center text-sm"><MapPin size={16} className="mr-2"/> ห้อง {courseInfo.room} | {courseTimeSettings.start} - {courseTimeSettings.absent} น.</p>
             </div>
             <button className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center mt-4 md:mt-0 shadow-sm border border-purple-500">
               <Camera size={16} className="mr-2"/> เปิดระบบเช็คชื่อ (Manual)
@@ -166,7 +256,7 @@ export default function InstructorCourseDetail() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600"/> กำหนดเวลาเช็คชื่อ</h4>
-                  <button onClick={() => setShowSetTimeModal(true)} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm">แก้ไขเวลา</button>
+                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm">แก้ไขเวลา</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="border border-green-200 bg-green-50 p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-sm block mb-1">ตรงเวลา (เริ่มคลาส)</span><span className="text-2xl font-bold text-green-800">{courseTimeSettings.start} น.</span></div>
@@ -226,36 +316,40 @@ export default function InstructorCourseDetail() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div><h4 className="font-bold text-slate-800 text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
                 <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
-                    <input type="text" placeholder="ค้นหารหัสนักศึกษา..." className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
-                  </div>
-                  <button onClick={() => setShowAddStudentModal(true)} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0">+ เพิ่มรายชื่อ</button>
+                  <button onClick={() => { setAddStudentId(''); setShowAddStudentModal(true); }} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0">+ เพิ่มรายชื่อ</button>
                 </div>
               </div>
               
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-sm">
-                  <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4 font-semibold w-24">รหัส</th>
-                      <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
-                      <th className="py-3 px-4 font-semibold text-center w-24">จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {studentList.map(student => (
-                      <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 text-slate-600">{student.id}</td>
-                        <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
-                        <td className="py-3 px-4 text-center">
-                          <button onClick={() => setStudentToDelete(student)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ลบรายชื่อนศ."><Trash2 size={16}/></button>
-                        </td>
+              {studentList.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200">
+                  <Users size={36} className="mx-auto text-slate-300 mb-3" />
+                  <p className="font-bold text-slate-500">ยังไม่มีนักศึกษาในคลาสนี้</p>
+                  <p className="text-slate-400 text-sm mt-1">กดปุ่ม "+ เพิ่มรายชื่อ" เพื่อเพิ่มนักศึกษา</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
+                        <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
+                        <th className="py-3 px-4 font-semibold text-center w-24">จัดการ</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {studentList.map(student => (
+                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 text-slate-600 font-mono text-xs">{student.studentId || '-'}</td>
+                          <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
+                          <td className="py-3 px-4 text-center">
+                            <button onClick={() => setStudentToDelete(student)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ลบรายชื่อนศ."><Trash2 size={16}/></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -401,11 +495,11 @@ export default function InstructorCourseDetail() {
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Clock className="mr-2 text-purple-600" size={20}/> กำหนดเวลา</h3>
             <div className="space-y-3 mb-6">
-              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา</label><input type="time" defaultValue={courseTimeSettings.start} className="w-full px-3 py-2 border rounded-md" /></div>
-              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" defaultValue={courseTimeSettings.late} className="w-full px-3 py-2 border rounded-md" /></div>
-              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" defaultValue={courseTimeSettings.absent} className="w-full px-3 py-2 border rounded-md" /></div>
+              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({...editTimeForm, start: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
-            <button onClick={() => setShowSetTimeModal(false)} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
+            <button onClick={() => { setCourseTimeSettings(editTimeForm); setShowSetTimeModal(false); }} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
           </div>
         </div>
       )}
@@ -464,6 +558,51 @@ export default function InstructorCourseDetail() {
             <div className="flex space-x-3">
               <button onClick={() => setShowCancelClassConfirm(false)} className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg font-bold">ยกเลิก</button>
               <button onClick={handleCancelClass} className="flex-1 bg-rose-500 text-white py-2.5 rounded-lg font-bold">ยืนยันแจ้งยกคลาส</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal เพิ่มนักศึกษา */}
+      {showAddStudentModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
+            <button onClick={() => setShowAddStudentModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
+            <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center"><Plus size={20} className="mr-2 text-purple-600"/> เพิ่มนักศึกษาเข้าคลาส</h3>
+            <p className="text-sm text-slate-500 mb-4">กรอกรหัสนักศึกษาที่ลงทะเบียนไว้ในระบบแล้ว</p>
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">รหัสนักศึกษา (13 หลัก)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="เช่น 2310511010014"
+                value={addStudentId}
+                onChange={(e) => setAddStudentId(e.target.value.replace(/\D/g, '').slice(0, 13))}
+                maxLength={13}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-mono tracking-wider"
+              />
+            </div>
+            <button
+              onClick={handleAddStudent}
+              disabled={addingStudent || !addStudentId.trim()}
+              className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {addingStudent ? 'กำลังเพิ่ม...' : 'ยืนยันเพิ่มนักศึกษา'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ยืนยันลบนักศึกษา */}
+      {studentToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32} /></div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">ลบนักศึกษา?</h3>
+            <p className="text-slate-500 text-sm mb-1 font-semibold">{studentToDelete.name}</p>
+            <p className="text-slate-400 text-xs mb-6">รหัส: {studentToDelete.studentId}</p>
+            <div className="flex space-x-3">
+              <button onClick={() => setStudentToDelete(null)} className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-200">ยกเลิก</button>
+              <button onClick={handleDeleteStudent} className="flex-1 bg-red-500 text-white py-2.5 rounded-lg font-bold hover:bg-red-600">ยืนยันลบ</button>
             </div>
           </div>
         </div>

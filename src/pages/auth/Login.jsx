@@ -409,7 +409,7 @@ export default function Login() {
               {/* ส่วนที่ย้ายออกมาด้านนอกกรอบกล้อง */}
               {faceRegStep === 1 && (
                 <div className="flex flex-col items-center mb-4">
-                  <div className="w-full px-5 py-3 rounded-xl text-sm font-bold tracking-wide bg-blue-50 text-[#1a237e] border border-blue-200 mb-3 text-center shadow-sm">
+                  <div className="w-full px-5 py-3 rounded-xl text-sm font-bold tracking-wide bg-blue-50 text-red-500 border border-blue-200 mb-3 text-center shadow-sm">
                     {faceStatus}
                   </div>
                   <button type="button" onClick={handleScanFace} className="bg-[#1a237e] hover:opacity-90 text-white font-bold py-3 px-8 rounded-2xl shadow-xl transition-all active:scale-95 w-full text-lg">

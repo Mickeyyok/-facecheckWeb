@@ -24,12 +24,25 @@ export default function Login() {
   const [faceRegStep, setFaceRegStep] = useState(0);
   const [isFaceRegistered, setIsFaceRegistered] = useState(false);
 
+  // Multi-Pose config (4 มุม)
+  const poses = ['straight', 'left', 'right', 'up'];
+  const poseTexts = {
+    straight: 'มองตรงมาที่กล้อง',
+    left: 'หันหน้าไปทางซ้าย',
+    right: 'หันหน้าไปทางขวา',
+    up: 'เงยหน้าขึ้นเล็กน้อย',
+  };
+  const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
+  const [poseDescriptors, setPoseDescriptors] = useState({});
+
   // State สำหรับ AI กล้อง
   const videoRef = useRef(null);
+  const detectionLoopRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [faceDescriptor, setFaceDescriptor] = useState(null); // ตัวเลข 128 ตัว
+  const [faceDescriptor, setFaceDescriptor] = useState(null); // Array ของ Array 4 มุม
   const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
-  
+  const [isPoseCorrect, setIsPoseCorrect] = useState(false);
+
   // State สำหรับแสดง Modal สมัครสมาชิกสำเร็จ
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -51,59 +64,143 @@ export default function Login() {
     loadModels();
   }, []);
 
-  // 2. จัดการเปิด/ปิดกล้องเมื่อ Modal แสดง
+  // ฟังก์ชันตรวจสอบทิศทางใบหน้าจาก landmarks
+  const checkPoseFromLandmarks = (landmarks, requiredPose) => {
+    const pts = landmarks.positions;
+    // จุดสำคัญ: จมูก (30), คางปลาย (8), หน้าผาก (27)
+    const nose = pts[30];
+    const chin = pts[8];
+    const forehead = pts[27];
+    // กว้าง/สูงของใบหน้า (normalize)
+    const faceW = Math.abs(pts[16].x - pts[0].x);
+    const faceH = Math.abs(chin.y - forehead.y);
+    const centerX = (pts[0].x + pts[16].x) / 2;
+    const centerY = (forehead.y + chin.y) / 2;
+    // yaw: ลบ = หันซ้าย, บวก = หันขวา
+    const yaw = (nose.x - centerX) / faceW;
+    // pitch: ลบ = เงยหน้า, บวก = ก้มหน้า
+    const pitch = (nose.y - centerY) / faceH;
+
+    // straight: loose — just need face roughly forward
+    // directional: only check the relevant axis, ignore the other
+    // 💡 ลดตัวเลขลงเพื่อให้สแกนผ่านง่ายขึ้น
+    switch (requiredPose) {
+      // หน้าตรง: ใจดีขึ้นหน่อย หันซ้ายขวาได้นิดหน่อย
+      case 'straight': return Math.abs(yaw) < 0.35 && Math.abs(pitch) < 0.35;
+      // หันซ้าย
+      case 'left': return yaw < -0.05;
+      // หันขวา
+      case 'right': return yaw > 0.05;
+      // เงยหน้า
+      case 'up': return pitch < -0.05;
+      default: return false;
+    }
+  };
+
+  // 2. จัดการเปิด/ปิดกล้อง + loop ตรวจทิศทาง
   useEffect(() => {
     let streamRef = null;
+    let active = true;
+
+    const runDetectionLoop = async (requiredPose) => {
+      if (!active || !videoRef.current || !modelsLoaded) return;
+      const detection = await faceapi
+        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks();
+      if (!active) return;
+      if (detection) {
+        const ok = checkPoseFromLandmarks(detection.landmarks, requiredPose);
+        setIsPoseCorrect(ok);
+        setFaceStatus(ok
+          ? `✅ ${poseTexts[requiredPose]} — พร้อมสแกน!`
+          : `👉 ${poseTexts[requiredPose]}`);
+      } else {
+        setIsPoseCorrect(false);
+        setFaceStatus('ไม่พบใบหน้า กรุณาเข้ามาในกรอบ');
+      }
+      // รัน ~10fps
+      detectionLoopRef.current = setTimeout(() => runDetectionLoop(requiredPose), 100);
+    };
+
     if (showFaceRegModal && faceRegStep === 1) {
+      setIsPoseCorrect(false);
       navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
-        .then((stream) => { 
+        .then((stream) => {
           streamRef = stream;
-          if(videoRef.current) videoRef.current.srcObject = stream; 
-          setFaceStatus('กรุณามองตรงมาที่กล้อง ให้อยู่ในกรอบ ');
+          if (videoRef.current) videoRef.current.srcObject = stream;
+          // ถ้า video พร้อมแล้ว onloadeddata อาจไม่ fire → ใช้ setTimeout เป็น fallback
+          const startLoop = () => {
+            if (!active) return;
+            runDetectionLoop(poses[currentPoseIndex]);
+          };
+          videoRef.current.onloadeddata = startLoop;
+          setTimeout(startLoop, 500); // fallback กรณี video โหลดเสร็จก่อน handler
         })
         .catch((err) => {
-          console.error("เปิดกล้องไม่ได้:", err);
+          console.error('เปิดกล้องไม่ได้:', err);
           setFaceStatus('เปิดกล้องไม่ได้ กรุณาอนุญาตให้เว็บเข้าถึงกล้อง');
         });
     }
-    
-    return () => { // ปิดกล้องตอนปิด Modal / เปลี่ยน Step
-      if (streamRef) {
-        streamRef.getTracks().forEach(track => track.stop());
-      }
-    }
-  }, [showFaceRegModal, faceRegStep]);
+
+    return () => {
+      active = false;
+      clearTimeout(detectionLoopRef.current);
+      if (streamRef) streamRef.getTracks().forEach(t => t.stop());
+    };
+  }, [showFaceRegModal, faceRegStep, currentPoseIndex, modelsLoaded]);
 
   const isStudent = authRole === 'student';
 
   const handleStartFaceReg = () => {
     setShowFaceRegModal(true);
     setFaceRegStep(0);
-    
+    setCurrentPoseIndex(0);
+    setPoseDescriptors({});
+
     if (!modelsLoaded) {
-       setFaceStatus('กำลังโหลด AI Models...');
-       setTimeout(() => setFaceRegStep(1), 1500);
+      setFaceStatus('กำลังโหลด AI Models...');
+      setTimeout(() => {
+        setFaceRegStep(1);
+        setFaceStatus(poseTexts['straight']);
+      }, 1500);
     } else {
-       setFaceRegStep(1); // เปิดกล้องเลย
+      setFaceRegStep(1);
+      setFaceStatus(poseTexts['straight']);
     }
   };
 
-  // 3. ฟังก์ชันสแกนและดึง 128 ตัวเลข
-  const handleScanFace = async () => {
-    if (!modelsLoaded || !videoRef.current) return;
-    
+  // 3. ฟังก์ชันสแกนทีละมุม (Multi-Pose)
+  const handleCapturePose = async () => {
+    if (!modelsLoaded || !videoRef.current || !isPoseCorrect) return;
+    // หยุด loop ชั่วคราวระหว่างประมวลผล
+    clearTimeout(detectionLoopRef.current);
+
     setFaceStatus('กำลังประมวลผลใบหน้า....');
-    const detection = await faceapi.detectSingleFace(
-      videoRef.current, 
-      new faceapi.TinyFaceDetectorOptions()
-    ).withFaceLandmarks().withFaceDescriptor();
+    const detection = await faceapi
+      .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
 
     if (detection) {
-      setFaceDescriptor(Array.from(detection.descriptor)); // ได้ตัวเลข 128 ตัว!
-      setFaceRegStep(3); // ทะลุไปหน้า Success!!
-      setIsFaceRegistered(true);
+      const currentPose = poses[currentPoseIndex];
+      const descriptorArray = Array.from(detection.descriptor);
+
+      const updated = { ...poseDescriptors, [currentPose]: descriptorArray };
+      setPoseDescriptors(updated);
+
+      if (currentPoseIndex < poses.length - 1) {
+        const nextIndex = currentPoseIndex + 1;
+        setCurrentPoseIndex(nextIndex);
+        setFaceStatus(poseTexts[poses[nextIndex]]);
+      } else {
+        // ครบ 5 มุม → สร้าง finalDescriptorArray แล้วส่งต่อ
+        const finalDescriptorArray = poses.map((p) => updated[p]);
+        setFaceDescriptor(finalDescriptorArray);
+        setFaceRegStep(3);
+        setIsFaceRegistered(true);
+      }
     } else {
-      setFaceStatus('หาใบหน้าไม่เจอ! ลองขยับมาใกล้ๆ และมองตรง');
+      setFaceStatus('หาใบหน้าไม่เจอ! ลองขยับมาใกล้ๆ แล้วลองใหม่');
     }
   };
 
@@ -130,16 +227,16 @@ export default function Login() {
         setError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
         return;
       }
-      // ตรวจสอบ Face ID สำหรับนักศึกษา
-      if (isStudent && !faceDescriptor) {
-        alert('กรุณาลงทะเบียนข้อมูลใบหน้า (Face ID) ให้เรียบร้อยก่อนกดสมัครสมาชิกครับ');
+      // ตรวจสอบ Face ID สำหรับนักศึกษา (ต้องสแกนครบ 4 มุม)
+      if (isStudent && (!faceDescriptor || faceDescriptor.length < 4)) {
+        alert('กรุณาลงทะเบียนข้อมูลใบหน้าให้ครบ 4 มุม (Face ID) ก่อนกดสมัครสมาชิกครับ');
         return;
       }
     }
 
     try {
       setIsLoading(true);
-      
+
       if (authMode === 'register') {
         // แอบสร้างอีเมลจำลองให้นักศึกษา เพื่อไม่ให้ Backend พัง (เพราะ DB บังคับใส่ Email)
         const emailToSend = !isStudent ? identifier : `${identifier}@utcc.ac.th`;
@@ -153,7 +250,7 @@ export default function Login() {
           faceDescriptor: faceDescriptor ? faceDescriptor : []
         };
         await authService.register(userData);
-        
+
         // เมื่อสมัครสำเร็จ ให้เปิด Modal แทน alert
         setShowSuccessModal(true);
       } else {
@@ -188,7 +285,7 @@ export default function Login() {
           <p className="text-center text-white/80 text-[15px] font-medium relative z-10 leading-relaxed">
             {authMode === 'login'
               ? 'ระบบเช็กชื่อด้วยใบหน้าและพิกัด\nUTCC Smart System'
-              : 'กรุณาลงทะเบียนเเละสเเกนใบหน้าเพื่อใช้งานระบบ'}
+              : 'กรุณาลงทะเบียนและสแกนใบหน้าเพื่อใช้งานระบบ'}
           </p>
           {/* พื้นหลังตกแต่ง */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
@@ -289,13 +386,12 @@ export default function Login() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className={`w-full px-4 py-3 rounded-xl border transition-all text-sm tracking-widest focus:outline-none focus:ring-2 ${
-                      confirmPassword && confirmPassword !== password
+                    className={`w-full px-4 py-3 rounded-xl border transition-all text-sm tracking-widest focus:outline-none focus:ring-2 ${confirmPassword && confirmPassword !== password
                         ? 'border-red-400 focus:ring-red-200 bg-red-50'
                         : confirmPassword && confirmPassword === password
-                        ? 'border-green-400 focus:ring-green-200 bg-green-50'
-                        : `border-slate-300 bg-white ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`
-                    }`}
+                          ? 'border-green-400 focus:ring-green-200 bg-green-50'
+                          : `border-slate-300 bg-white ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`
+                      }`}
                   />
                   {confirmPassword && confirmPassword !== password && (
                     <p className="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
@@ -372,53 +468,87 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Modal Face Registration */}
+      {/* Modal Face Registration — Multi-Pose */}
       {showFaceRegModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20">
-            {faceRegStep !== 3 && <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1.5 transition-colors"><X size={24} strokeWidth={2.5} /></button>}
-            <div className="p-10">
-              <h3 className="text-[26px] font-black text-center mb-1 text-slate-800 tracking-tight">ลงทะเบียนใบหน้า</h3>
-              <p className="text-center text-slate-500 font-medium text-sm mb-8">ขยับใบหน้าให้อยู่ในกรอบที่กำหนด</p>
+            {faceRegStep !== 3 && (
+              <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1.5 transition-colors">
+                <X size={24} strokeWidth={2.5} />
+              </button>
+            )}
+            <div className="p-8">
+              <h3 className="text-[24px] font-black text-center mb-1 text-slate-800 tracking-tight">ลงทะเบียนใบหน้า (4 มุม)</h3>
+              <p className="text-center text-slate-500 font-medium text-sm mb-4">สแกนใบหน้าครบทุกมุมเพื่อความแม่นยำสูงสุด</p>
 
-              <div className="bg-slate-900 aspect-[3/4] sm:aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-6 shadow-inner border border-slate-800">
+              {/* Progress circles */}
+              {faceRegStep !== 3 && (
+                <div className="flex justify-center gap-3 mb-4">
+                  {poses.map((pose, idx) => (
+                    <div key={pose} className="flex flex-col items-center">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm ${poseDescriptors[pose] ? 'bg-emerald-500' : idx === currentPoseIndex ? 'bg-[#1a237e]' : 'bg-slate-300'
+                        }`}>
+                        {poseDescriptors[pose] ? '✓' : idx + 1}
+                      </div>
+                      <span className="text-[10px] mt-1 text-slate-500 font-medium">{pose.toUpperCase()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Camera area */}
+              <div className="bg-slate-900 aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-4 shadow-inner border border-slate-800">
                 {faceRegStep === 0 && (
                   <div className="flex flex-col items-center animate-pulse">
-                    <div className="bg-blue-500/20 p-5 rounded-full mb-4 shadow-[0_0_20px_rgba(59,130,246,0.3)]"><Camera size={40} className="text-blue-400" /></div>
+                    <div className="bg-blue-500/20 p-5 rounded-full mb-4"><Camera size={40} className="text-blue-400" /></div>
                     <p className="font-bold tracking-wide">กำลังเตรียมกล้อง...</p>
                   </div>
-                )
-                }
+                )}
                 {faceRegStep === 1 && (
                   <>
                     <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-90 scale-105" />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-48 h-64 border-[4px] border-blue-400 rounded-[100px] shadow-[0_0_30px_rgba(96,165,250,0.5)]"></div>
+                      <div className="w-44 h-60 border-[4px] border-blue-400 rounded-[100px] shadow-[0_0_30px_rgba(96,165,250,0.5)]"></div>
                     </div>
                   </>
                 )}
                 {faceRegStep === 3 && (
                   <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="bg-white/20 p-5 rounded-full mb-4 shadow-lg backdrop-blur-sm"><CheckCircle size={56} className="text-white" strokeWidth={2.5} /></div>
-                    <h4 className="text-4xl font-black text-white mb-2 tracking-tight">สำเร็จ!</h4>
-                    <p className="text-emerald-50 font-bold">ระบบจดจำใบหน้าเรียบร้อย</p>
+                    <div className="bg-white/20 p-5 rounded-full mb-4"><CheckCircle size={56} className="text-white" strokeWidth={2.5} /></div>
+                    <h4 className="text-4xl font-black text-white mb-2">สำเร็จ!</h4>
+                    <p className="text-emerald-50 font-bold">จดจำใบหน้าครบ 4 มุมแล้ว</p>
                   </div>
                 )}
               </div>
 
-              {/* ส่วนที่ย้ายออกมาด้านนอกกรอบกล้อง */}
+              {/* Controls */}
               {faceRegStep === 1 && (
-                <div className="flex flex-col items-center mb-4">
-                  <div className="w-full px-5 py-3 rounded-xl text-sm font-bold tracking-wide bg-blue-50 text-[#1a237e] border border-blue-200 mb-3 text-center shadow-sm">
+                <div className="flex flex-col items-center">
+                  <div className={`w-full px-4 py-2.5 rounded-xl text-sm font-bold mb-3 text-center transition-colors ${isPoseCorrect
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                      : 'bg-blue-50 text-[#1a237e] border border-blue-200'
+                    }`}>
                     {faceStatus}
                   </div>
-                  <button type="button" onClick={handleScanFace} className="bg-[#1a237e] hover:opacity-90 text-white font-bold py-3 px-8 rounded-2xl shadow-xl transition-all active:scale-95 w-full text-lg">
-                    สแกนใบหน้า
+                  <button
+                    type="button"
+                    onClick={handleCapturePose}
+                    disabled={!isPoseCorrect}
+                    className={`font-bold py-3 px-8 rounded-2xl shadow-xl transition-all w-full text-lg ${isPoseCorrect
+                        ? 'bg-[#1a237e] hover:opacity-90 text-white active:scale-95'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      }`}
+                  >
+                    สแกนมุม {poses[currentPoseIndex]?.toUpperCase()} ({currentPoseIndex + 1}/4)
                   </button>
                 </div>
               )}
 
-              {faceRegStep === 3 && <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#1a237e] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">ดำเนินการต่อ</button>}
+              {faceRegStep === 3 && (
+                <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#1a237e] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">
+                  ดำเนินการต่อ
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -435,7 +565,7 @@ export default function Login() {
               สมัครสมาชิกสำเร็จ!
             </h3>
             <p className="text-slate-500 font-medium mb-8 text-sm leading-relaxed">
-              บัญชีของคุณถูกสร้างเรียบร้อยแล้ว <br /> 
+              บัญชีของคุณถูกสร้างเรียบร้อยแล้ว <br />
               กรุณาเข้าสู่ระบบเพื่อเริ่มต้นใช้งาน FaceCheck
             </p>
             <button
@@ -446,7 +576,7 @@ export default function Login() {
                 setPassword('');
                 setConfirmPassword('');
                 setIsFaceRegistered(false);
-                setFaceDescriptor(null); 
+                setFaceDescriptor(null);
               }}
               className="w-full text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-95 text-lg hover:opacity-90 bg-[#1a237e]"
             >

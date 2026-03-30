@@ -56,4 +56,16 @@ export const classService = {
     const response = await api.post(`/notifications/cancel-class/${classId}`);
     return response.data;
   },
+
+  // ดึงรายวิชาของนักศึกษาตาม User ID
+  getClassesByStudent: async (studentId) => {
+    try {
+      // ใช้ api instance ที่มี baseURL เป็น /api เรียบร้อยแล้ว
+      const response = await api.get(`/class-students/student/${studentId}`);
+      return response.data;
+    } catch (error) {
+      console.error('ดึงข้อมูลคลาสของนักศึกษาไม่สำเร็จ:', error);
+      throw error;
+    }
+  },
 };

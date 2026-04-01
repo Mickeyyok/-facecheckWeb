@@ -68,4 +68,19 @@ export const classService = {
       throw error;
     }
   },
+
+  // ==========================================
+  // ใหม! สำหรับให้นักศึกษากดเข้าร่วมคลาส
+  // ==========================================
+  joinClass: async (subjectCode, studentId) => {
+    try {
+      const response = await api.post('/class-students/join', { subjectCode, studentId });
+      return response.data;
+    } catch (error) {
+      console.error('Join class error:', error);
+      throw error.response?.data || { message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
+    }
+  }
 };
+
+

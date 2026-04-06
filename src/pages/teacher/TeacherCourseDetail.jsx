@@ -127,7 +127,10 @@ export default function TeacherCourseDetail() {
   ]);
 
   // --- States สำหรับสถิติรายวัน ---
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [dailyStats, setDailyStats] = useState({ total: 0, present: 0, late: 0, absent: 0 });
 
@@ -146,8 +149,13 @@ export default function TeacherCourseDetail() {
       let absentCount = 0;
       
       const mergedData = studentList.map(student => {
-        // หาข้อมูลการเช็คชื่อของนศ.คนนี้
-        const record = serverData && Array.isArray(serverData) ? serverData.find(r => r.studentId === student.id || r.studentId === student.studentId) : null;
+        // หาข้อมูลการเช็คชื่อของนศ.คนนี้ (ลอง match หลายฟิลด์)
+        const record = serverData && Array.isArray(serverData) ? serverData.find(r => 
+          r.studentId === student.id || 
+          r.studentId === student.studentUserId ||
+          r.studentId === student.studentId ||
+          r.studentCode === student.studentId
+        ) : null;
         let status = 'pending';
         let time = '-';
         
@@ -216,7 +224,7 @@ export default function TeacherCourseDetail() {
         
         {/* Header ส่วนบนสีดำ */}
         <div className="bg-slate-900 text-white p-6 pb-0">
-          <div className="flex items-center space-x-2 text-slate-400 mb-4 cursor-pointer hover:text-white transition w-max" onClick={() => navigate('/instructor/dashboard')}>
+          <div className="flex items-center space-x-2 text-slate-400 mb-4 cursor-pointer hover:text-white transition w-max" onClick={() => navigate('/teacher/dashboard')}>
             <ChevronRight size={18} className="rotate-180" /> <span className="text-sm font-medium">กลับไปหน้าคลาสของฉัน</span>
           </div>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6">

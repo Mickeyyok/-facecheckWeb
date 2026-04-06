@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { classService } from '../../services/classService';
 import { useAuth } from '../../context/AuthContext';
+import { attendanceService } from '../../services/attendanceService';
 
 // Component ป้ายสถานะ
 const StatusBadge = ({ status }) => {
@@ -19,7 +20,7 @@ const StatusBadge = ({ status }) => {
 export default function InstructorCourseDetail() {
   const { courseId } = useParams(); // ดึง UUID ของคลาสจาก URL
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [courseSubTab, setCourseSubTab] = useState('info');
   const [loadingCourse, setLoadingCourse] = useState(true);
 
@@ -41,9 +42,9 @@ export default function InstructorCourseDetail() {
         setCourseInfo({
           name: data.subjectName || '',
           code: data.subjectCode || '',
-          instructor: user?.name || '',
+          instructor: data.instructorName || user?.name || '',
           room: data.room || '',
-          term: '2568 / 1'
+          term: data.term || '2568 / 1'
         });
         // อัพเดทเวลาถ้ามี
         if (data.startTime || data.endTime) {
@@ -124,6 +125,50 @@ export default function InstructorCourseDetail() {
     { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' },
     { id: 2, studentId: '640005', studentName: 'นายสมชาย มุ่งมั่น', issue: 'มาสายติดต่อกัน 3 คาบ', status: 'pending' }
   ]);
+
+  // --- States สำหรับสถิติรายวัน ---
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dailyAttendance, setDailyAttendance] = useState([]);
+  const [dailyStats, setDailyStats] = useState({ total: 0, present: 0, late: 0, absent: 0 });
+
+  useEffect(() => {
+    if (courseId && courseSubTab === 'daily') {
+      fetchDailyStats();
+    }
+  }, [courseId, courseSubTab, selectedDate, studentList]);
+
+  const fetchDailyStats = async () => {
+    try {
+      const serverData = await attendanceService.getDailyAttendance(courseId, selectedDate);
+      
+      let presentCount = 0;
+      let lateCount = 0;
+      let absentCount = 0;
+      
+      const mergedData = studentList.map(student => {
+        // หาข้อมูลการเช็คชื่อของนศ.คนนี้
+        const record = serverData && Array.isArray(serverData) ? serverData.find(r => r.studentId === student.id || r.studentId === student.studentId) : null;
+        let status = 'pending';
+        let time = '-';
+        
+        if (record) {
+          status = record.status;
+          time = record.time || '-';
+        }
+        
+        if (status === 'present') presentCount++;
+        else if (status === 'late') lateCount++;
+        else if (status === 'absent') absentCount++;
+        
+        return { ...student, status, time };
+      });
+      
+      setDailyAttendance(mergedData);
+      setDailyStats({ total: studentList.length, present: presentCount, late: lateCount, absent: absentCount });
+    } catch (error) {
+      console.error('Failed to fetch daily stats', error);
+    }
+  };
 
   // --- States สำหรับการตั้งค่า ---
   const [isEditingCourseInfo, setIsEditingCourseInfo] = useState(false);
@@ -223,7 +268,22 @@ export default function InstructorCourseDetail() {
                   ) : (
                     <div className="flex space-x-2">
                       <button onClick={() => setIsEditingCourseInfo(false)} className="text-sm bg-slate-100 text-slate-600 font-bold px-4 py-2 rounded-lg hover:bg-slate-200 transition shadow-sm">ยกเลิก</button>
-                      <button onClick={() => { setCourseInfo(editCourseForm); setIsEditingCourseInfo(false); }} className="text-sm bg-purple-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center"><CheckCircle size={14} className="mr-1.5"/> บันทึก</button>
+                      <button onClick={async () => {
+                        try {
+                          await classService.updateClass(courseId, {
+                            subjectName: editCourseForm.name,
+                            subjectCode: editCourseForm.code,
+                            room: editCourseForm.room,
+                            term: editCourseForm.term,
+                            instructorName: editCourseForm.instructor,
+                          });
+                          setCourseInfo(editCourseForm);
+                          updateUser({ name: editCourseForm.instructor });
+                          setIsEditingCourseInfo(false);
+                        } catch (err) {
+                          alert('บันทึกข้อมูลวิชาไม่สำเร็จ: ' + (err.response?.data?.message || err.message));
+                        }
+                      }} className="text-sm bg-purple-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center"><CheckCircle size={14} className="mr-1.5"/> บันทึก</button>
                     </div>
                   )}
                 </div>
@@ -360,15 +420,15 @@ export default function InstructorCourseDetail() {
                 <h4 className="font-bold text-slate-800 mb-3 md:mb-0">รายงานสถิติประจำวัน</h4>
                 <div className="flex items-center bg-white border border-slate-300 rounded-lg px-3 py-2 shadow-sm">
                   <Calendar size={16} className="text-slate-400 mr-2"/>
-                  <input type="date" defaultValue="2026-03-19" className="text-sm text-slate-700 outline-none font-medium" />
+                  <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-sm text-slate-700 outline-none font-medium" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold uppercase mb-1">นักศึกษาทั้งหมด</p><p className="text-3xl font-bold text-slate-800">30</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-3xl font-bold text-green-600">25</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-3xl font-bold text-yellow-600">3</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-3xl font-bold text-red-500">2</p></div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold uppercase mb-1">นักศึกษาทั้งหมด</p><p className="text-3xl font-bold text-slate-800">{dailyStats.total}</p></div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-3xl font-bold text-green-600">{dailyStats.present}</p></div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-3xl font-bold text-yellow-600">{dailyStats.late}</p></div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-3xl font-bold text-red-500">{dailyStats.absent}</p></div>
               </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-xl">
@@ -377,9 +437,9 @@ export default function InstructorCourseDetail() {
                     <tr><th className="py-3 px-4 font-semibold w-24">รหัส</th><th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th><th className="py-3 px-4 font-semibold text-center">สถานะการเช็คชื่อวันนี้</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {studentList.map(student => (
+                    {dailyAttendance.map(student => (
                       <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 text-slate-600">{student.id}</td>
+                        <td className="py-3 px-4 text-slate-600">{student.studentId || student.id}</td>
                         <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
                         <td className="py-3 px-4 text-center">
                           <StatusBadge status={student.status} />
@@ -499,7 +559,24 @@ export default function InstructorCourseDetail() {
               <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
               <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
-            <button onClick={() => { setCourseTimeSettings(editTimeForm); setShowSetTimeModal(false); }} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
+            <button onClick={async () => {
+              try {
+                // คำนวณ lateThresholdMinutes จากเวลา start กับ late
+                const [sh, sm] = editTimeForm.start.split(':').map(Number);
+                const [lh, lm] = editTimeForm.late.split(':').map(Number);
+                const lateMinutes = (lh * 60 + lm) - (sh * 60 + sm);
+
+                await classService.updateClass(courseId, {
+                  startTime: editTimeForm.start,
+                  endTime: editTimeForm.absent, // endTime = เวลาขาดเรียน
+                  lateThresholdMinutes: lateMinutes > 0 ? lateMinutes : 15,
+                });
+                setCourseTimeSettings(editTimeForm);
+                setShowSetTimeModal(false);
+              } catch (err) {
+                alert('บันทึกเวลาไม่สำเร็จ: ' + (err.response?.data?.message || err.message));
+              }
+            }} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
           </div>
         </div>
       )}

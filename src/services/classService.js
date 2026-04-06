@@ -25,6 +25,12 @@ export const classService = {
     return response.data;
   },
 
+  // อัปเดตข้อมูลคลาส
+  updateClass: async (classId, classData) => {
+    const response = await api.put(`/classes/${classId}`, classData);
+    return response.data;
+  },
+
   // ==========================================
   // นักศึกษาในคลาส (class_students)
   // ==========================================

@@ -12,5 +12,18 @@ export const attendanceService = {
       // โยน error ออกไปให้หน้าเว็บแจ้งเตือนนักศึกษา
       throw error.response?.data || { message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
     }
+  },
+
+  // ฟังก์ชันดึงรายงานสถิติรายวัน
+  getDailyAttendance: async (classId, date) => {
+    try {
+      // ลองเรียก API สำหรับสถิติรายวัน
+      const response = await api.get(`/attendance/class/${classId}/daily`, { params: { date } });
+      return response.data;
+    } catch (error) {
+      console.error('Get daily attendance error:', error);
+      // ถ้า Backend ยังไม่ได้สร้าง endpoint นี้ ให้คืนค่าชั่วคราว
+      return null;
+    }
   }
 };

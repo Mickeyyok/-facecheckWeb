@@ -30,8 +30,13 @@ export const AuthProvider = ({ children }) => {
     navigate('/'); // เด้งกลับหน้า Login
   };
 
+  // ฟังก์ชันอัปเดตข้อมูลผู้ใช้ (เช่น ชื่อ)
+  const updateUser = (newData) => {
+    setUser(prev => prev ? { ...prev, ...newData } : prev);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

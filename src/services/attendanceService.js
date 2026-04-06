@@ -25,5 +25,16 @@ export const attendanceService = {
       // ถ้า Backend ยังไม่ได้สร้าง endpoint นี้ ให้คืนค่าชั่วคราว
       return null;
     }
+  },
+
+  // ✅ เพิ่มฟังก์ชันใหม่: ดึงประวัติการเข้าเรียนของนักศึกษา
+  getHistoryByStudent: async (studentId) => {
+    try {
+      const response = await api.get(`/attendance/student/${studentId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching attendance history:', error);
+      throw error.response?.data || { message: 'ไม่สามารถดึงประวัติการเข้าเรียนได้' };
+    }
   }
 };

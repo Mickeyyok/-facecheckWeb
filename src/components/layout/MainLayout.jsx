@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Camera, LayoutDashboard, BookOpen, History, Activity, Bell, LogOut } from 'lucide-react';
+import { LayoutDashboard, BookOpen, History, Bell, LogOut, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { notificationService } from '../../services/notificationService';
 
@@ -23,50 +23,52 @@ export default function MainLayout({ role }) {
     <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-blue-100">
       
       {/* Sidebar */}
-      <div className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-20">
+      <div className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-20 shadow-xl">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
           <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="w-10 h-10 object-contain relative z-10 drop-shadow-sm inline-block alignment-adjust" />
           <span className="text-xl font-bold tracking-wide">FaceCheck</span>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 mt-2">
           {/* เมนูหน้าหลัก */}
           <NavLink 
             to={`/${role}/dashboard`} 
-            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            end // ใส่ end เพื่อให้ Active เฉพาะตอนอยู่หน้า Dashboard จริงๆ
+            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
-            <LayoutDashboard size={20} /><span>{role === 'student' ? 'หน้าหลัก' : 'จัดการรายวิชา'}</span>
+            <LayoutDashboard size={20} />
+            <span>{role === 'student' ? 'หน้าหลัก' : 'จัดการคลาสเรียน'}</span>
           </NavLink>
           
-          {/* เมนูรายวิชาของฉัน (เฉพาะนักศึกษา) */}
+          {/* เมนูเฉพาะของนักศึกษา */}
           {role === 'student' && (
-            <NavLink 
-              to="/student/courses" 
-              className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-            >
-              <BookOpen size={20} /><span>รายวิชาของฉัน</span>
-            </NavLink>
+            <>
+              <NavLink 
+                to="/student/courses" 
+                className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              >
+                <BookOpen size={20} /><span>รายวิชาของฉัน</span>
+              </NavLink>
+
+              <NavLink 
+                to="/student/history" 
+                className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              >
+                <History size={20} /><span>ประวัติการเข้าเรียน</span>
+              </NavLink>
+            </>
           )}
 
-          {/* เมนูประวัติ / แดชบอร์ดคลาส */}
-          <NavLink 
-            to={`/${role === 'student' ? 'student/history' : 'instructor/course/SP344'}`} 
-            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-          >
-            {role === 'student' ? <History size={20} /> : <Activity size={20} />}
-            <span>{role === 'student' ? 'ประวัติการเข้าเรียน' : 'แดชบอร์ดคลาส'}</span>
-          </NavLink>
-
-          {/* เมนูแจ้งเตือน */}
+          {/* เมนูแจ้งเตือน (ใช้ได้ทั้งสองฝั่ง) */}
           <NavLink 
             to={`/${role}/notifications`} 
-            className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${isActive ? 'bg-[#1a237e] text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <div className="flex items-center space-x-3">
               <Bell size={20} /><span>การแจ้งเตือน</span>
             </div>
             {unreadNotificationsCount > 0 && (
-              <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                 {unreadNotificationsCount}
               </span>
             )}
@@ -74,24 +76,29 @@ export default function MainLayout({ role }) {
         </nav>
         
         {/* เมนูออกจากระบบ */}
-        <div className="p-4 border-t border-slate-800">
-          <button onClick={logout} className="flex items-center space-x-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition">
+        <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+          <button onClick={logout} className="flex items-center space-x-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors font-medium">
             <LogOut size={20} /><span>ออกจากระบบ</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="ml-64 w-full flex flex-col min-h-screen">
+      <div className="ml-64 w-full flex flex-col min-h-screen bg-slate-50/50">
         
         {/* Top Navbar */}
-        <header className="bg-white h-16 px-8 flex items-center justify-between sticky top-0 z-10 border-b border-slate-200 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-800 capitalize">
-            {role === 'student' ? 'ระบบนักศึกษา' : 'ระบบอาจารย์ผู้สอน'}
-          </h2>
+        <header className="bg-white/80 backdrop-blur-md h-16 px-8 flex items-center justify-between sticky top-0 z-10 border-b border-slate-200 shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-lg ${role === 'student' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+               {role === 'student' ? <BookOpen size={20} /> : <Users size={20} />}
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 capitalize tracking-tight">
+              {role === 'student' ? 'ระบบนักศึกษา' : 'ระบบอาจารย์ผู้สอน'}
+            </h2>
+          </div>
           
           <div className="flex items-center space-x-5">
-            <button onClick={() => navigate(`/${role}/notifications`)} className="relative text-slate-400 hover:text-blue-600 transition-colors">
+            <button onClick={() => navigate(`/${role}/notifications`)} className="relative text-slate-400 hover:text-[#1a237e] transition-colors">
               <Bell size={22} />
               {unreadNotificationsCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
@@ -102,18 +109,23 @@ export default function MainLayout({ role }) {
             </button>
 
             <div className="flex items-center space-x-3 pl-5 border-l border-slate-200">
-              <span className="text-sm font-bold text-slate-700">
-                {user?.name}
-              </span>
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${role === 'student' ? 'bg-blue-600' : 'bg-purple-600'}`}>
-                {user?.name?.[0]}
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-bold text-slate-700 leading-tight">
+                  {user?.fullName || user?.name || 'ผู้ใช้งาน'}
+                </span>
+                <span className="text-xs font-medium text-slate-400 capitalize">
+                  {role} Account
+                </span>
+              </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm border border-white ${role === 'student' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                {(user?.fullName || user?.name || 'U')[0].toUpperCase()}
               </div>
             </div>
           </div>
         </header>
 
         {/* พื้นที่สำหรับแสดง Content ของแต่ละหน้า (Outlet) */}
-        <main className="flex-1 overflow-x-hidden">
+        <main className="flex-1 overflow-x-hidden p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

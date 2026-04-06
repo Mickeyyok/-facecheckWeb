@@ -6,11 +6,12 @@ import StudentDashboard from './pages/student/StudentDashboard';
 import StudentCourses from './pages/student/StudentCourses';
 import StudentHistory from './pages/student/StudentHistory';
 import FaceRegistration from './pages/student/FaceRegistration';
-import InstructorDashboard from './pages/instructor/InstructorDashboard';
-import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
-import Notifications from './pages/Notifications';
 
-// Import ProtectedRoute ที่เราเพิ่งสร้าง
+// ✅ ใช้ชื่อ Component ใหม่ที่สื่อถึง Teacher
+import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import TeacherCourseDetail from './pages/teacher/TeacherCourseDetail';
+
+import Notifications from './pages/Notifications';
 import ProtectedRoute from './components/common/ProtectedRoute'; 
 
 export default function App() {
@@ -19,7 +20,7 @@ export default function App() {
       <Route path="/" element={<Login />} />
       <Route path="/register-face" element={<FaceRegistration />} />
 
-      {/* กลุ่มหน้าของ นักศึกษา (โดนล็อกด้วย ProtectedRoute) */}
+      {/* กลุ่มหน้าของ นักศึกษา */}
       <Route element={<ProtectedRoute allowedRole="student" />}>
         <Route path="/student" element={<MainLayout role="student" />}>
           <Route index element={<Navigate to="dashboard" replace />} />
@@ -30,28 +31,22 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* กลุ่มหน้าของ อาจารย์ (โดนล็อกด้วย ProtectedRoute) */}
-      <Route element={<ProtectedRoute allowedRole="instructor" />}>
-        <Route path="/instructor" element={<MainLayout role="instructor" />}>
+      {/* ✅ กลุ่มหน้าของ อาจารย์ (เปลี่ยนเป็น teacher ทั้งหมด) */}
+      <Route element={<ProtectedRoute allowedRole="teacher" />}>
+        <Route path="/teacher" element={<MainLayout role="teacher" />}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          
-          {/* เปลี่ยนกลับมาใช้ InstructorDashboard ของคุณที่มีอยู่แล้ว */}
-          <Route path="dashboard" element={<InstructorDashboard />} />
-
-          {/* ลบ Route manage-subjects ออก เพราะเราใช้ InstructorDashboard แทนแล้ว */}
-          
-          <Route path="course/:courseId" element={<InstructorCourseDetail />} />
-          <Route path="notifications" element={<Notifications role="instructor" />} />
+          <Route path="dashboard" element={<TeacherDashboard />} />
+          <Route path="course/:courseId" element={<TeacherCourseDetail />} />
+          <Route path="notifications" element={<Notifications role="teacher" />} />
         </Route>
       </Route>
       
-      {/* Alias: ถ้า Spring Boot ส่ง role='teacher' กลับมา ให้ Redirect ไปหน้าอาจารย์ */}
-      <Route path="/teacher" element={<Navigate to="/instructor" replace />} />
-      <Route path="/teacher/*" element={<Navigate to="/instructor" replace />} />
+      {/* Alias: กันเหนียวถ้าหลุดไป /instructor ให้ดีดกลับมา /teacher */}
+      <Route path="/instructor" element={<Navigate to="/teacher" replace />} />
+      <Route path="/instructor/*" element={<Navigate to="/teacher" replace />} />
 
-      {/* Catch-all: URL ใดๆ ที่ไม่มีอยู่จริง ให้เด้งกลับหน้า Login */}
+      {/* Catch-all: ถ้าไปหน้ามั่วๆ ให้เด้งกลับ Login */}
       <Route path="*" element={<Navigate to="/" replace />} />
-      
     </Routes>
   );
 }

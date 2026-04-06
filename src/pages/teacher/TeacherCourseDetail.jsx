@@ -16,7 +16,7 @@ const StatusBadge = ({ status }) => {
   return <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">- รอดำเนินการ</span>;
 };
 
-export default function InstructorCourseDetail() {
+export default function TeacherCourseDetail() {
   const { courseId } = useParams(); // ดึง UUID ของคลาสจาก URL
   const navigate = useNavigate();
   const { user } = useAuth();

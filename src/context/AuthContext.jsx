@@ -1,33 +1,34 @@
 import React, { createContext, useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
 
-// สร้าง Context
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // null = ยังไม่ล็อกอิน, ถ้าล็อกอินจะเป็น { role: 'student' หรือ 'instructor', name: '...' }
-  const navigate = useNavigate();
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (error) {
+      return null;
+    }
+  });
 
-  // ฟังก์ชันล็อกอิน
-  const login = (role, userData) => {
-    // Normalize: แปลง role จาก Backend ให้ตรงกับที่ Frontend ใช้
-    // เช่น 'teacher' → 'instructor', 'STUDENT' → 'student'
-    const roleMap = {
-      teacher: 'instructor',
-      TEACHER: 'instructor',
-      INSTRUCTOR: 'instructor',
-      STUDENT: 'student',
-    };
-    const normalizedRole = roleMap[role] ?? role; // ถ้าไม่มีใน Map ให้ใช้ค่าเดิม
+  const login = (userData, tokenData) => {
+    // 1. 💡 ป้องกัน Local Storage พัง: คัดลอกข้อมูล User และลบ faceDescriptor ทิ้งก่อนเซฟ
+    const { faceDescriptor, ...cleanUserData } = userData;
 
-    setUser({ role: normalizedRole, ...userData });
-    navigate(`/${normalizedRole}/dashboard`);
+    // 2. เซฟข้อมูลที่สะอาดแล้วลง State และ LocalStorage
+    setUser(cleanUserData);
+    localStorage.setItem('user', JSON.stringify(cleanUserData));
+    
+    // 3. สร้าง Token จำลองเพื่อให้ App.jsx ยอมให้ผ่าน
+    localStorage.setItem('token', tokenData || 'dummy-auth-token');
   };
 
-  // ฟังก์ชันออกจากระบบ
   const logout = () => {
     setUser(null);
-    navigate('/'); // เด้งกลับหน้า Login
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    window.location.href = '/login'; 
   };
 
   return (
@@ -37,5 +38,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Custom Hook สำหรับเรียกใช้ข้อมูลคนล็อกอินได้ง่ายๆ
 export const useAuth = () => useContext(AuthContext);

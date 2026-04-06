@@ -4,7 +4,7 @@ import { Search, Plus, Trash2, Calendar, MapPin, Users, ChevronRight, XCircle, C
 import { useAuth } from '../../context/AuthContext';
 import { classService } from '../../services/classService';
 
-export default function InstructorDashboard() {
+export default function TeacherDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 

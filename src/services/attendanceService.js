@@ -12,5 +12,16 @@ export const attendanceService = {
       // โยน error ออกไปให้หน้าเว็บแจ้งเตือนนักศึกษา
       throw error.response?.data || { message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
     }
+  }, // <--- สังเกตตรงนี้ครับ ต้องมีลูกน้ำ (comma) คั่นเสมอเมื่อขึ้นฟังก์ชันใหม่
+
+  // ✅ เพิ่มฟังก์ชันใหม่: ดึงประวัติการเข้าเรียนของนักศึกษา
+  getHistoryByStudent: async (studentId) => {
+    try {
+      const response = await api.get(`/attendance/student/${studentId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching attendance history:', error);
+      throw error.response?.data || { message: 'ไม่สามารถดึงประวัติการเข้าเรียนได้' };
+    }
   }
 };

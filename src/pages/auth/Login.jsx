@@ -7,24 +7,32 @@ import { authService } from '../../services/authService';
 export default function Login() {
   const { login } = useAuth();
 
-  // State สำหรับจัดการหน้าฟอร์ม
-  const [authMode, setAuthMode] = useState('login'); // 'login', 'register'
-  const [authRole, setAuthRole] = useState('student'); // 'student', 'instructor'
-
-  // State สำหรับ Input และ API
-  const [identifier, setIdentifier] = useState(''); // รหัสนักศึกษา หรือ อีเมลอาจารย์
+  // --- 1. States Management ---
+  const [authMode, setAuthMode] = useState('login'); 
+  const [authRole, setAuthRole] = useState('student'); // 'student', 'teacher'
+  const [identifier, setIdentifier] = useState(''); 
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // ยืนยันรหัสผ่าน
-  const [fullName, setFullName] = useState(''); // ชื่อ-สกุล สำหรับสมัครสมาชิก
+  const [confirmPassword, setConfirmPassword] = useState(''); 
+  const [fullName, setFullName] = useState(''); 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // State สำหรับลงทะเบียนใบหน้า (Face Registration)
+  // Face Registration States
   const [showFaceRegModal, setShowFaceRegModal] = useState(false);
   const [faceRegStep, setFaceRegStep] = useState(0);
   const [isFaceRegistered, setIsFaceRegistered] = useState(false);
+  const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
+  const [poseDescriptors, setPoseDescriptors] = useState({});
+  const [faceDescriptor, setFaceDescriptor] = useState(null);
 
-  // Multi-Pose config (4 มุม)
+  // AI & Camera States
+  const videoRef = useRef(null);
+  const detectionLoopRef = useRef(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
+  const [isPoseCorrect, setIsPoseCorrect] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   const poses = ['straight', 'left', 'right', 'up'];
   const poseTexts = {
     straight: 'มองตรงมาที่กล้อง',
@@ -32,21 +40,8 @@ export default function Login() {
     right: 'หันหน้าไปทางขวา',
     up: 'เงยหน้าขึ้นเล็กน้อย',
   };
-  const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
-  const [poseDescriptors, setPoseDescriptors] = useState({});
 
-  // State สำหรับ AI กล้อง
-  const videoRef = useRef(null);
-  const detectionLoopRef = useRef(null);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [faceDescriptor, setFaceDescriptor] = useState(null); // Array ของ Array 4 มุม
-  const [faceStatus, setFaceStatus] = useState('กำลังเตรียมกล้อง...');
-  const [isPoseCorrect, setIsPoseCorrect] = useState(false);
-
-  // State สำหรับแสดง Modal สมัครสมาชิกสำเร็จ
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-
-  // 1. โหลด AI Models
+  // --- 2. Face API Models Loading ---
   useEffect(() => {
     const loadModels = async () => {
       const MODEL_URL = '/models';
@@ -64,82 +59,53 @@ export default function Login() {
     loadModels();
   }, []);
 
-  // ฟังก์ชันตรวจสอบทิศทางใบหน้าจาก landmarks
+  // --- 3. Face Detection Logic ---
   const checkPoseFromLandmarks = (landmarks, requiredPose) => {
     const pts = landmarks.positions;
-    // จุดสำคัญ: จมูก (30), คางปลาย (8), หน้าผาก (27)
     const nose = pts[30];
-    const chin = pts[8];
-    const forehead = pts[27];
-    // กว้าง/สูงของใบหน้า (normalize)
     const faceW = Math.abs(pts[16].x - pts[0].x);
-    const faceH = Math.abs(chin.y - forehead.y);
     const centerX = (pts[0].x + pts[16].x) / 2;
-    const centerY = (forehead.y + chin.y) / 2;
-    // yaw: ลบ = หันซ้าย, บวก = หันขวา
+    const centerY = (pts[27].y + pts[8].y) / 2;
     const yaw = (nose.x - centerX) / faceW;
-    // pitch: ลบ = เงยหน้า, บวก = ก้มหน้า
-    const pitch = (nose.y - centerY) / faceH;
+    const pitch = (nose.y - centerY) / Math.abs(pts[8].y - pts[27].y);
 
-    // straight: loose — just need face roughly forward
-    // directional: only check the relevant axis, ignore the other
-    // 💡 ลดตัวเลขลงเพื่อให้สแกนผ่านง่ายขึ้น
     switch (requiredPose) {
-      // หน้าตรง: ใจดีขึ้นหน่อย หันซ้ายขวาได้นิดหน่อย
       case 'straight': return Math.abs(yaw) < 0.35 && Math.abs(pitch) < 0.35;
-      // หันซ้าย
       case 'left': return yaw < -0.05;
-      // หันขวา
       case 'right': return yaw > 0.05;
-      // เงยหน้า
       case 'up': return pitch < -0.05;
       default: return false;
     }
   };
 
-  // 2. จัดการเปิด/ปิดกล้อง + loop ตรวจทิศทาง
   useEffect(() => {
     let streamRef = null;
     let active = true;
 
     const runDetectionLoop = async (requiredPose) => {
       if (!active || !videoRef.current || !modelsLoaded) return;
-      const detection = await faceapi
-        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks();
+      const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+      
       if (!active) return;
       if (detection) {
         const ok = checkPoseFromLandmarks(detection.landmarks, requiredPose);
         setIsPoseCorrect(ok);
-        setFaceStatus(ok
-          ? `✅ ${poseTexts[requiredPose]} — พร้อมสแกน!`
-          : `👉 ${poseTexts[requiredPose]}`);
+        setFaceStatus(ok ? `✅ พร้อมสแกน!` : `👉 ${poseTexts[requiredPose]}`);
       } else {
         setIsPoseCorrect(false);
         setFaceStatus('ไม่พบใบหน้า กรุณาเข้ามาในกรอบ');
       }
-      // รัน ~10fps
       detectionLoopRef.current = setTimeout(() => runDetectionLoop(requiredPose), 100);
     };
 
     if (showFaceRegModal && faceRegStep === 1) {
-      setIsPoseCorrect(false);
       navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
         .then((stream) => {
           streamRef = stream;
           if (videoRef.current) videoRef.current.srcObject = stream;
-          // ถ้า video พร้อมแล้ว onloadeddata อาจไม่ fire → ใช้ setTimeout เป็น fallback
-          const startLoop = () => {
-            if (!active) return;
-            runDetectionLoop(poses[currentPoseIndex]);
-          };
-          videoRef.current.onloadeddata = startLoop;
-          setTimeout(startLoop, 500); // fallback กรณี video โหลดเสร็จก่อน handler
+          setTimeout(() => { if (active) runDetectionLoop(poses[currentPoseIndex]); }, 500);
         })
-        .catch((err) => {
-          console.error('เปิดกล้องไม่ได้:', err);
-          setFaceStatus('เปิดกล้องไม่ได้ กรุณาอนุญาตให้เว็บเข้าถึงกล้อง');
-        });
+        .catch(err => setFaceStatus('เปิดกล้องไม่ได้ กรุณาตรวจสอบสิทธิ์'));
     }
 
     return () => {
@@ -149,443 +115,196 @@ export default function Login() {
     };
   }, [showFaceRegModal, faceRegStep, currentPoseIndex, modelsLoaded]);
 
-  const isStudent = authRole === 'student';
-
+  // --- 4. Event Handlers ---
   const handleStartFaceReg = () => {
     setShowFaceRegModal(true);
-    setFaceRegStep(0);
+    setFaceRegStep(1);
     setCurrentPoseIndex(0);
     setPoseDescriptors({});
-
-    if (!modelsLoaded) {
-      setFaceStatus('กำลังโหลด AI Models...');
-      setTimeout(() => {
-        setFaceRegStep(1);
-        setFaceStatus(poseTexts['straight']);
-      }, 1500);
-    } else {
-      setFaceRegStep(1);
-      setFaceStatus(poseTexts['straight']);
-    }
   };
 
-  // 3. ฟังก์ชันสแกนทีละมุม (Multi-Pose)
   const handleCapturePose = async () => {
     if (!modelsLoaded || !videoRef.current || !isPoseCorrect) return;
-    // หยุด loop ชั่วคราวระหว่างประมวลผล
     clearTimeout(detectionLoopRef.current);
+    setFaceStatus('กำลังประมวลผล...');
 
-    setFaceStatus('กำลังประมวลผลใบหน้า....');
-    const detection = await faceapi
-      .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-
+    const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+    
     if (detection) {
-      const currentPose = poses[currentPoseIndex];
-      const descriptorArray = Array.from(detection.descriptor);
-
-      const updated = { ...poseDescriptors, [currentPose]: descriptorArray };
+      const updated = { ...poseDescriptors, [poses[currentPoseIndex]]: Array.from(detection.descriptor) };
       setPoseDescriptors(updated);
 
       if (currentPoseIndex < poses.length - 1) {
-        const nextIndex = currentPoseIndex + 1;
-        setCurrentPoseIndex(nextIndex);
-        setFaceStatus(poseTexts[poses[nextIndex]]);
+        setCurrentPoseIndex(prev => prev + 1);
       } else {
-        // ครบ 5 มุม → สร้าง finalDescriptorArray แล้วส่งต่อ
-        const finalDescriptorArray = poses.map((p) => updated[p]);
-        setFaceDescriptor(finalDescriptorArray);
+        const finalArray = poses.map(p => updated[p]);
+        setFaceDescriptor(finalArray);
         setFaceRegStep(3);
         setIsFaceRegistered(true);
       }
-    } else {
-      setFaceStatus('หาใบหน้าไม่เจอ! ลองขยับมาใกล้ๆ แล้วลองใหม่');
     }
   };
 
-  // ตรวจสอบความแข็งแรงรหัสผ่าน
-  const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
-
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // ล้าง Error เก่าก่อนทุกครั้ง
+    setError('');
+    const isStudent = authRole === 'student';
 
     if (authMode === 'register') {
-      // ตรวจสอบรหัสนักศึกษา 13 หลัก
-      if (isStudent && !/^\d{13}$/.test(identifier)) {
-        setError('รหัสนักศึกษาต้องเป็นตัวเลข 13 หลักเท่านั้น');
-        return;
-      }
-      // ตรวจสอบความแข็งแรงรหัสผ่าน
-      if (!passwordRegex.test(password)) {
-        setError('รหัสผ่านต้องมีอย่างน้อย 8 ตัว มีพิมพ์ใหญ่อย่างน้อย 1 ตัว และอักษรพิเศษอย่างน้อย 1 ตัว');
-        return;
-      }
-      // ตรวจสอบรหัสผ่านตรงกัน
-      if (password !== confirmPassword) {
-        setError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
-        return;
-      }
-      // ตรวจสอบ Face ID สำหรับนักศึกษา (ต้องสแกนครบ 4 มุม)
-      if (isStudent && (!faceDescriptor || faceDescriptor.length < 4)) {
-        alert('กรุณาลงทะเบียนข้อมูลใบหน้าให้ครบ 4 มุม (Face ID) ก่อนกดสมัครสมาชิกครับ');
-        return;
-      }
+      if (isStudent && !/^\d{13}$/.test(identifier)) return setError('รหัสนักศึกษาต้องเป็นตัวเลข 13 หลัก');
+      if (password !== confirmPassword) return setError('รหัสผ่านไม่ตรงกัน');
+      if (isStudent && !isFaceRegistered) return alert('กรุณาสแกนใบหน้าให้ครบ 4 มุม');
     }
 
     try {
       setIsLoading(true);
-
       if (authMode === 'register') {
-        // แอบสร้างอีเมลจำลองให้นักศึกษา เพื่อไม่ให้ Backend พัง (เพราะ DB บังคับใส่ Email)
-        const emailToSend = !isStudent ? identifier : `${identifier}@utcc.ac.th`;
-
         const userData = {
-          role: authRole === 'instructor' ? 'teacher' : 'student',
-          email: emailToSend,
+          role: authRole, 
+          email: isStudent ? `${identifier}@utcc.ac.th` : identifier,
           studentId: isStudent ? identifier : null,
-          password: password,
-          fullName: fullName,
-          faceDescriptor: faceDescriptor ? faceDescriptor : []
+          password, fullName, faceDescriptor: faceDescriptor || []
         };
         await authService.register(userData);
-
-        // เมื่อสมัครสำเร็จ ให้เปิด Modal แทน alert
         setShowSuccessModal(true);
       } else {
-        // จัดข้อมูลตอน ล็อกอิน ตาม Role
-        let loginData = { password: password };
-        if (isStudent) {
-          loginData.studentId = identifier; // ถ้าเป็นนักศึกษา ส่งรหัสนักศึกษา
-        } else {
-          loginData.email = identifier; // ถ้าเป็นอาจารย์ ส่งอีเมล
-        }
-
-        // ยิง API ไปหา Spring Boot จริงๆ
+        const loginData = isStudent ? { studentId: identifier, password } : { email: identifier, password };
         const response = await authService.login(loginData);
-        // ถ้าสำเร็จ → เซ็ต user ใน AuthContext แล้วพาไป Dashboard
-        login(response.user.role, { id: response.user.id, name: response.user.fullName || response.user.name });
+        login(response.user, response.token); 
+        
+        // Redirect logic
+        window.location.href = response.user.role === 'student' ? '/student' : '/teacher';
       }
     } catch (err) {
-      setError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+      setError(err.message || 'เกิดข้อผิดพลาด');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // --- 5. Render UI ---
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center font-sans selection:bg-blue-100">
-      <div className="bg-white w-full h-screen flex overflow-hidden relative">
-
-        {/* Left Side: Branding */}
-        <div className={`hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center relative overflow-hidden transition-colors duration-500 bg-[#1a237e] `}>
-          <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="mb-6 w-45 h-45 object-contain relative z-10 drop-shadow-md" />
-          <h1 className="text-4xl font-extrabold mb-3 tracking-tight relative z-10">FaceCheck UTCC</h1>
-          <p className="text-center text-white/80 text-[15px] font-medium relative z-10 leading-relaxed">
-            {authMode === 'login'
-              ? 'ระบบเช็กชื่อด้วยใบหน้าและพิกัด\nUTCC Smart System'
-              : 'กรุณาลงทะเบียนและสแกนใบหน้าเพื่อใช้งานระบบ'}
-          </p>
-          {/* พื้นหลังตกแต่ง */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-black opacity-10 rounded-full blur-2xl -ml-10 -mb-10"></div>
+      <div className="bg-white w-full h-screen flex overflow-hidden relative shadow-2xl">
+        
+        {/* Left Branding */}
+        <div className="hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center bg-[#1a237e] relative overflow-hidden">
+          <img src="/src/assets/UTCC-Official-1.png" alt="Logo" className="mb-6 w-44 object-contain z-10 drop-shadow-lg" />
+          <h1 className="text-4xl font-black z-10 tracking-tight">FaceCheck UTCC</h1>
+          <p className="z-10 mt-4 opacity-80 text-center font-medium">Smart Attendance & Geo-Location System</p>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-2xl -ml-10 -mb-10"></div>
         </div>
 
-        {/* Right Side: Form */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col bg-white overflow-y-auto relative justify-center">
-          <div className="max-w-md w-full mx-auto animate-in fade-in duration-300">
-
-            {/* Header */}
-            <div className="mb-8 text-center md:text-md">
-              <h2 className="title-login font-default-40-48 mb-4">
-                {authMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชีใหม่'}
-              </h2>
-              <p className="subtitle-login font-default-20-32 ">
-                {authMode === 'login' ? 'โปรดป้อนรหัสประจำตัวและรหัสผ่าน' : 'ลงทะเบียนเพื่อเริ่มต้นใช้งานระบบ'}
-              </p>
+        {/* Right Form */}
+        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-white overflow-y-auto">
+          <div className="max-w-md w-full mx-auto animate-in fade-in duration-500">
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-black text-slate-800">{authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2>
+              <p className="text-slate-500 mt-2 font-medium">{authMode === 'login' ? 'ยินดีต้อนรับกลับเข้าสู่ระบบ' : 'สร้างบัญชีเพื่อเริ่มต้นใช้งาน'}</p>
             </div>
 
             {/* Role Toggle */}
-            <div className="flex p-1 bg-slate-100 rounded-xl mb-6 border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setAuthRole('student')}
-                className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${isStudent ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <User size={20} color={isStudent ? '#1a237e' : '#64748b'} />
-                <span style={isStudent ? { color: '#1a237e' } : {}}>นักศึกษา</span>
+            <div className="flex p-1 bg-slate-100 rounded-2xl mb-8 border border-slate-200">
+              <button type="button" onClick={() => setAuthRole('student')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'student' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                <User size={18} /><span>นักศึกษา</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setAuthRole('instructor')}
-                className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${!isStudent ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <Users size={20} color={!isStudent ? '#1a237e' : '#64748b'} />
-                <span style={!isStudent ? { color: '#1a237e' } : {}}>อาจารย์ผู้สอน</span>
+              <button type="button" onClick={() => setAuthRole('teacher')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'teacher' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                <Users size={18} /><span>อาจารย์</span>
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <form onSubmit={handleAuthSubmit} className="space-y-5">
               {authMode === 'register' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่อ - สกุล</label>
-                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="เช่น นาย กฤษณะ สุริยวงษ์" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 ml-1">ชื่อ - นามสกุล</label>
+                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="เช่น นายสมชาย ใจดี" required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all" />
                 </div>
               )}
 
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-75">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">{isStudent ? 'รหัสนักศึกษา' : 'อีเมลมหาวิทยาลัย'}</label>
-                {isStudent ? (
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={identifier}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 13);
-                      setIdentifier(val);
-                    }}
-                    placeholder="กรอกเลข 13 หลัก"
-                    maxLength={13}
-                    required
-                    className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`}
-                  />
-                ) : (
-                  <input
-                    type="email"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="instructor@utcc.ac.th"
-                    required
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm focus:border-purple-500 focus:ring-purple-200"
-                  />
-                )}
-                {authMode === 'register' && isStudent && (
-                  <p className="text-xs text-slate-400 mt-1">กรอกเฉพาะตัวเลข 13 หลัก</p>
-                )}
-              </div>
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
-                <div className="flex justify-between items-end mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700">รหัสผ่าน</label>
-                  {authMode === 'login' && <a href="#" className={`text-xs font-bold hover:underline text-[#1a237e]`}>ลืมรหัสผ่าน?</a>}
-                </div>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className={`w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 transition-all text-sm tracking-widest ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`} />
-                {authMode === 'register' && (
-                  <p className="text-xs text-slate-400 mt-1">ต้องมีอย่างน้อย 8 ตัว, พิมพ์ใหญ่ 1 ตัว และอักษรพิเศษ 1 ตัว (เช่น !@#$)</p>
-                )}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">{authRole === 'student' ? 'รหัสนักศึกษา' : 'อีเมลอาจารย์'}</label>
+                <input type="text" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder={authRole === 'student' ? "ระบุ 13 หลัก" : "name@utcc.ac.th"} required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all" />
               </div>
 
-              {/* ช่องยืนยันรหัสผ่าน (แสดงเฉพาะตอนสมัครสมาชิก) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">รหัสผ่าน</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" />
+              </div>
+
               {authMode === 'register' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-200">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">ยืนยันรหัสผ่าน</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    className={`w-full px-4 py-3 rounded-xl border transition-all text-sm tracking-widest focus:outline-none focus:ring-2 ${confirmPassword && confirmPassword !== password
-                        ? 'border-red-400 focus:ring-red-200 bg-red-50'
-                        : confirmPassword && confirmPassword === password
-                          ? 'border-green-400 focus:ring-green-200 bg-green-50'
-                          : `border-slate-300 bg-white ${isStudent ? 'focus:border-blue-500 focus:ring-blue-200' : 'focus:border-purple-500 focus:ring-purple-200'}`
-                      }`}
-                  />
-                  {confirmPassword && confirmPassword !== password && (
-                    <p className="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
-                  )}
-                  {confirmPassword && confirmPassword === password && (
-                    <p className="text-xs text-green-600 mt-1">✓ รหัสผ่านตรงกัน</p>
-                  )}
-                </div>
-              )}
-
-              {/* กรอบลงทะเบียนใบหน้า (แสดงเฉพาะตอนสมัครสมาชิก และเป็นนักศึกษา) */}
-              {authMode === 'register' && isStudent && (
-                <div className="pt-2 animate-in fade-in slide-in-from-bottom-2 duration-300 delay-200">
-                  {!isFaceRegistered ? (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:bg-slate-100 transition-colors">
-                      <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-2 bg-blue-100 text-blue-600"><Camera size={20} /></div>
-                      <p className="text-sm font-bold text-slate-800 mb-1">ลงทะเบียนข้อมูลใบหน้า (Face ID)</p>
-                      <p className="text-xs text-slate-500 mb-3">จำเป็นต้องใช้ใบหน้าเพื่อเช็กชื่อเข้าเรียน</p>
-                      <button onClick={handleStartFaceReg} type="button" className="text-sm font-bold px-4 py-2 rounded-lg border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 transition-colors shadow-sm">+ สแกนใบหน้าตอนนี้</button>
-                    </div>
-                  ) : (
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-5 text-center animate-in zoom-in-95">
-                      <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-2 bg-green-100 text-green-600 shadow-sm"><CheckCircle size={24} strokeWidth={2.5} /></div>
-                      <p className="text-sm font-bold text-green-800 mb-1">ลงทะเบียนใบหน้าสำเร็จ</p>
-                      <p className="text-xs text-green-600">ข้อมูลถูกบันทึกเข้าระบบเรียบร้อยแล้ว</p>
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600 ml-1">ยืนยันรหัสผ่าน</label>
+                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" />
+                  </div>
+                  {authRole === 'student' && (
+                    <div className="pt-2">
+                      {!isFaceRegistered ? (
+                        <button onClick={handleStartFaceReg} type="button" className="w-full py-4 border-2 border-dashed border-blue-200 rounded-2xl text-[#1a237e] font-bold hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Camera size={20}/>ลงทะเบียนใบหน้า (Face ID)</button>
+                      ) : (
+                        <div className="bg-green-50 text-green-700 p-4 rounded-2xl text-center font-bold border border-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/>สแกนใบหน้าครบ 4 มุมแล้ว</div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
 
-              {/* แสดง Error จาก Backend */}
-              {error && (
-                <p className="text-red-500 text-sm font-medium text-center bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 animate-in fade-in">
-                  {error}
-                </p>
-              )}
+              {error && <div className="text-red-500 text-sm text-center bg-red-50 py-3 rounded-xl font-medium animate-shake">{error}</div>}
 
-              <button type="submit" disabled={isLoading}
-                className="w-full mt-2 py-3.5 rounded-xl font-bold text-white shadow-sm transition-all active:scale-95 flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed"
-                style={{ backgroundColor: '#1a237e' }}>
-                {isLoading ? 'กำลังตรวจสอบ...' : (authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก')}
+              <button type="submit" disabled={isLoading} className="w-full py-4.5 rounded-2xl font-bold text-white bg-[#1a237e] hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-blue-900/20 mt-4">
+                {isLoading ? 'กำลังประมวลผล...' : authMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชีผู้ใช้'}
               </button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-slate-500 animate-in fade-in duration-500">
-              {authMode === 'login' ? (
-                <p>
-                  ยังไม่มีบัญชีใช่ไหม?{' '}
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('register'); setIsFaceRegistered(false); }}
-                    className="font-bold hover:underline"
-                    style={{ color: '#1a237e' }}
-                  >
-                    สมัครสมาชิก
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  มีบัญชีอยู่แล้ว?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('login')}
-                    className="font-bold hover:underline"
-                    style={{ color: '#1a237e' }}
-                  >
-                    เข้าสู่ระบบ
-                  </button>
-                </p>
-              )}
+            <div className="mt-10 text-center">
+              <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="text-slate-500 font-medium hover:text-[#1a237e] transition-colors">
+                {authMode === 'login' ? <span>ยังไม่มีบัญชี? <span className="font-bold text-[#1a237e] underline">สมัครสมาชิก</span></span> : <span>มีบัญชีอยู่แล้ว? <span className="font-bold text-[#1a237e] underline">เข้าสู่ระบบที่นี่</span></span>}
+              </button>
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* Modal Face Registration — Multi-Pose */}
+      {/* Face Modal */}
       {showFaceRegModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20">
-            {faceRegStep !== 3 && (
-              <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1.5 transition-colors">
-                <X size={24} strokeWidth={2.5} />
-              </button>
-            )}
-            <div className="p-8">
-              <h3 className="text-[24px] font-black text-center mb-1 text-slate-800 tracking-tight">ลงทะเบียนใบหน้า (4 มุม)</h3>
-              <p className="text-center text-slate-500 font-medium text-sm mb-4">สแกนใบหน้าครบทุกมุมเพื่อความแม่นยำสูงสุด</p>
-
-              {/* Progress circles */}
-              {faceRegStep !== 3 && (
-                <div className="flex justify-center gap-3 mb-4">
-                  {poses.map((pose, idx) => (
-                    <div key={pose} className="flex flex-col items-center">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm ${poseDescriptors[pose] ? 'bg-emerald-500' : idx === currentPoseIndex ? 'bg-[#1a237e]' : 'bg-slate-300'
-                        }`}>
-                        {poseDescriptors[pose] ? '✓' : idx + 1}
-                      </div>
-                      <span className="text-[10px] mt-1 text-slate-500 font-medium">{pose.toUpperCase()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Camera area */}
-              <div className="bg-slate-900 aspect-square rounded-[2rem] overflow-hidden relative flex flex-col items-center justify-center text-white mb-4 shadow-inner border border-slate-800">
-                {faceRegStep === 0 && (
-                  <div className="flex flex-col items-center animate-pulse">
-                    <div className="bg-blue-500/20 p-5 rounded-full mb-4"><Camera size={40} className="text-blue-400" /></div>
-                    <p className="font-bold tracking-wide">กำลังเตรียมกล้อง...</p>
-                  </div>
-                )}
-                {faceRegStep === 1 && (
-                  <>
-                    <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-90 scale-105" />
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-44 h-60 border-[4px] border-blue-400 rounded-[100px] shadow-[0_0_30px_rgba(96,165,250,0.5)]"></div>
-                    </div>
-                  </>
-                )}
-                {faceRegStep === 3 && (
-                  <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="bg-white/20 p-5 rounded-full mb-4"><CheckCircle size={56} className="text-white" strokeWidth={2.5} /></div>
-                    <h4 className="text-4xl font-black text-white mb-2">สำเร็จ!</h4>
-                    <p className="text-emerald-50 font-bold">จดจำใบหน้าครบ 4 มุมแล้ว</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Controls */}
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md p-8 text-center relative shadow-2xl">
+            {faceRegStep !== 3 && <button onClick={() => setShowFaceRegModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors"><X size={24}/></button>}
+            <h3 className="text-2xl font-black mb-2 text-slate-800">สแกนใบหน้า ({currentPoseIndex + 1}/4)</h3>
+            <p className="text-slate-500 mb-6 text-sm font-medium">สแกนใบหน้าให้ครบทุกมุมเพื่อความแม่นยำ</p>
+            <div className="aspect-square bg-slate-100 rounded-[2rem] mb-6 overflow-hidden relative shadow-inner border-4 border-slate-50">
               {faceRegStep === 1 && (
-                <div className="flex flex-col items-center">
-                  <div className={`w-full px-4 py-2.5 rounded-xl text-sm font-bold mb-3 text-center transition-colors ${isPoseCorrect
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                      : 'bg-blue-50 text-[#1a237e] border border-blue-200'
-                    }`}>
-                    {faceStatus}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCapturePose}
-                    disabled={!isPoseCorrect}
-                    className={`font-bold py-3 px-8 rounded-2xl shadow-xl transition-all w-full text-lg ${isPoseCorrect
-                        ? 'bg-[#1a237e] hover:opacity-90 text-white active:scale-95'
-                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      }`}
-                  >
-                    สแกนมุม {poses[currentPoseIndex]?.toUpperCase()} ({currentPoseIndex + 1}/4)
-                  </button>
+                <>
+                  <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
+                  <div className="absolute inset-0 border-[4px] border-blue-400/40 rounded-full m-10 pointer-events-none"></div>
+                </>
+              )}
+              {faceRegStep === 3 && (
+                <div className="h-full flex flex-col items-center justify-center bg-emerald-500 text-white animate-in zoom-in">
+                  <CheckCircle size={80} strokeWidth={2.5} className="mb-4" />
+                  <p className="font-black text-2xl tracking-tight">ลงทะเบียนสำเร็จ!</p>
                 </div>
               )}
-
-              {faceRegStep === 3 && (
-                <button onClick={() => setShowFaceRegModal(false)} className="w-full mt-2 bg-[#1a237e] text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl active:scale-95">
-                  ดำเนินการต่อ
-                </button>
-              )}
             </div>
+            <p className="text-center font-bold text-blue-600 mb-8 bg-blue-50 py-2 rounded-xl">{faceStatus}</p>
+            {faceRegStep === 1 && <button onClick={handleCapturePose} disabled={!isPoseCorrect} className={`w-full py-4.5 rounded-2xl font-bold text-white transition-all shadow-xl ${isPoseCorrect ? 'bg-[#1a237e] hover:shadow-blue-900/40' : 'bg-slate-300 cursor-not-allowed'}`}>บันทึกมุม {poses[currentPoseIndex].toUpperCase()}</button>}
+            {faceRegStep === 3 && <button onClick={() => setShowFaceRegModal(false)} className="w-full py-4.5 bg-[#1a237e] text-white rounded-2xl font-bold shadow-xl">ดำเนินการต่อ</button>}
           </div>
         </div>
       )}
 
-      {/* Modal สมัครสมาชิกสำเร็จ */}
+      {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl relative p-8 text-center animate-in zoom-in-95 duration-300">
-            <div className="w-24 h-24 rounded-full mx-auto flex items-center justify-center mb-6 bg-green-50 text-green-500 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-              <CheckCircle size={48} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
-              สมัครสมาชิกสำเร็จ!
-            </h3>
-            <p className="text-slate-500 font-medium mb-8 text-sm leading-relaxed">
-              บัญชีของคุณถูกสร้างเรียบร้อยแล้ว <br />
-              กรุณาเข้าสู่ระบบเพื่อเริ่มต้นใช้งาน FaceCheck
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setShowSuccessModal(false);
-                setAuthMode('login');
-                setPassword('');
-                setConfirmPassword('');
-                setIsFaceRegistered(false);
-                setFaceDescriptor(null);
-              }}
-              className="w-full text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-95 text-lg hover:opacity-90 bg-[#1a237e]"
-            >
-              ไปหน้าเข้าสู่ระบบ
-            </button>
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-10 text-center shadow-2xl animate-in zoom-in duration-300">
+            <div className="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm"><CheckCircle size={56} strokeWidth={2.5} /></div>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">สร้างบัญชีสำเร็จ!</h3>
+            <p className="text-slate-500 font-medium mb-8">บัญชีของคุณพร้อมใช้งานแล้ว<br/>โปรดเข้าสู่ระบบเพื่อเริ่มใช้งาน</p>
+            <button onClick={() => {setShowSuccessModal(false); setAuthMode('login');}} className="w-full py-4.5 bg-[#1a237e] text-white rounded-2xl font-bold shadow-xl shadow-blue-900/20 active:scale-95 transition-all">ไปที่หน้าเข้าสู่ระบบ</button>
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X } from 'lucide-react';
 import * as faceapi from 'face-api.js';
-import { mockStudentData } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 import { attendanceService } from '../../services/attendanceService';
 import { classService } from '../../services/classService';
@@ -15,6 +14,8 @@ export default function StudentDashboard() {
   
   // --- States สำหรับคลาสเรียน (ดึงจาก API) ---
   const [studentClasses, setStudentClasses] = useState([]);
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(true);
   
   // --- States สำหรับระบบ Check-in ---
   const videoRef = useRef();
@@ -51,8 +52,23 @@ export default function StudentDashboard() {
       }
     };
 
+    const fetchAttendanceHistory = async () => {
+      try {
+        setStatsLoading(true);
+        if (user?.id) {
+          const data = await attendanceService.getHistoryByStudent(user.id);
+          setAttendanceHistory(data);
+        }
+      } catch (err) {
+        console.error('โหลดประวัติเข้าเรียนล้มเหลว', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
     loadModels();
     fetchMyClasses();
+    fetchAttendanceHistory();
   }, [user]);
 
   // วิชาที่กำลังจะเรียน (ให้เป็นวิชาแรกในลิสต์)
@@ -165,8 +181,16 @@ export default function StudentDashboard() {
     setShowCheckInModal(false);
   };
 
-  // คำนวณสถิติ (ส่วนนี้ยังใช้ข้อมูลจำลองอยู่ สามารถเปลี่ยนไปผูกกับ API ประวัติการเข้าเรียนในอนาคตได้)
-  const displayStats = activeCourse ? mockStudentData.activeCourseStats : mockStudentData.overallStats;
+  // คำนวณสถิติจาก attendance history จริง
+  const computeStats = (items) => ({
+    present: items.filter(h => h.status?.toUpperCase() === 'PRESENT').length,
+    late: items.filter(h => h.status?.toUpperCase() === 'LATE').length,
+    absent: items.filter(h => h.status?.toUpperCase() === 'ABSENT').length,
+  });
+
+  const displayStats = activeCourse
+    ? computeStats(attendanceHistory.filter(h => h.subjectCode === activeCourse.subjectCode))
+    : computeStats(attendanceHistory);
 
   return (
     <div className="p-8 lg:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-[1400px] mx-auto space-y-8">
@@ -213,7 +237,7 @@ export default function StudentDashboard() {
         <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
           <div>
             <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">เข้าเรียนตรงเวลา</p>
-            <p className="text-3xl font-black text-slate-800">{displayStats.present}</p>
+            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.present}</p>}
           </div>
           <div className="w-[52px] h-[52px] rounded-full bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center text-emerald-500">
             <CheckCircle size={26} strokeWidth={2.5} />
@@ -222,7 +246,7 @@ export default function StudentDashboard() {
         <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
           <div>
             <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">มาสาย</p>
-            <p className="text-3xl font-black text-slate-800">{displayStats.late}</p>
+            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.late}</p>}
           </div>
           <div className="w-[52px] h-[52px] rounded-full bg-amber-50 border-2 border-amber-100 flex items-center justify-center text-amber-500">
             <AlertTriangle size={26} strokeWidth={2.5} />
@@ -231,7 +255,7 @@ export default function StudentDashboard() {
         <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
           <div>
             <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">ขาดเรียน</p>
-            <p className="text-3xl font-black text-slate-800">{displayStats.absent}</p>
+            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.absent}</p>}
           </div>
           <div className="w-[52px] h-[52px] rounded-full bg-rose-50 border-2 border-rose-100 flex items-center justify-center text-rose-500">
             <XCircle size={26} strokeWidth={2.5} />

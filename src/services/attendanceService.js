@@ -23,5 +23,17 @@ export const attendanceService = {
       console.error('Error fetching attendance history:', error);
       throw error.response?.data || { message: 'ไม่สามารถดึงประวัติการเข้าเรียนได้' };
     }
+  },
+
+  // ดึงข้อมูลเช็คชื่อของคลาสตามวันที่ (สำหรับอาจารย์ดูสถิติรายวัน)
+  getAttendanceByClass: async (classId, date) => {
+    try {
+      const params = date ? { date } : {};
+      const response = await api.get(`/attendance/class/${classId}`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching class attendance:', error);
+      throw error.response?.data || { message: 'ไม่สามารถดึงข้อมูลเช็คชื่อของคลาสได้' };
+    }
   }
 };

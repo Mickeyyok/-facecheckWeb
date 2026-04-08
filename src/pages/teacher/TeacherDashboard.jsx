@@ -200,7 +200,7 @@ export default function TeacherDashboard() {
               <div className="mt-auto bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-between items-center">
                 <span className="text-xs text-slate-500 font-medium bg-white px-2 py-1 border border-slate-200 rounded">เกณฑ์: สายหลัง {course.lateThresholdMinutes || 15} นาที</span>
                 <button 
-                  onClick={() => navigate(`/instructor/course/${course.id}`)} 
+                  onClick={() => navigate(`/teacher/course/${course.id}`)} 
                   className="text-purple-600 text-sm font-bold flex items-center hover:text-purple-800 transition"
                 >
                   จัดการคลาส <ChevronRight size={16} className="ml-1"/>

@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock, 
   Target, AlertTriangle, Search, Plus, Trash2, Calendar, BarChart2, 
-  Brain, Sparkles, Mail, XCircle, Users 
+  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft 
 } from 'lucide-react';
 import { classService } from '../../services/classService';
+import { attendanceService } from '../../services/attendanceService';
 import { useAuth } from '../../context/AuthContext';
 
 // Component ป้ายสถานะ
@@ -120,6 +121,112 @@ export default function TeacherCourseDetail() {
     }
   };
 
+  // --- States สำหรับกำหนดวันที่มีเช็คชื่อ (ต้องอยู่ก่อน daily stats) ---
+  const [scheduledDates, setScheduledDates] = useState([]);
+
+  // --- States สำหรับสถิติรายวัน ---
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [dailyAttendance, setDailyAttendance] = useState([]);
+  const [loadingDaily, setLoadingDaily] = useState(false);
+
+  // รายการวันที่เปิดเช็คชื่อ (sorted)
+  const scheduledDateList = scheduledDates.map(d => d.date).sort();
+  const selectedDateIndex = scheduledDateList.indexOf(selectedDate);
+  const hasPrevDate = selectedDateIndex > 0;
+  const hasNextDate = selectedDateIndex >= 0 && selectedDateIndex < scheduledDateList.length - 1;
+  const goPrevDate = () => { if (hasPrevDate) setSelectedDate(scheduledDateList[selectedDateIndex - 1]); };
+  const goNextDate = () => { if (hasNextDate) setSelectedDate(scheduledDateList[selectedDateIndex + 1]); };
+
+  // เมื่อเปิด tab daily → เลือกวัน default จาก scheduledDates
+  useEffect(() => {
+    if (courseSubTab === 'daily' && scheduledDates.length > 0) {
+      const dates = scheduledDates.map(d => d.date).sort();
+      if (dates.includes(todayStr)) {
+        setSelectedDate(todayStr);
+      } else {
+        // หาวันที่ผ่านมาล่าสุด หรือวันแรกที่ยังไม่ถึง
+        const pastDates = dates.filter(d => d <= todayStr);
+        const futureDates = dates.filter(d => d > todayStr);
+        setSelectedDate(pastDates.length > 0 ? pastDates[pastDates.length - 1] : futureDates[0]);
+      }
+    }
+  }, [courseSubTab]);
+
+  const fetchDailyAttendance = async (date) => {
+    if (!courseId) return;
+    try {
+      setLoadingDaily(true);
+      const data = await attendanceService.getAttendanceByClass(courseId, date);
+      setDailyAttendance(data);
+    } catch (error) {
+      console.error('ดึงข้อมูลเช็คชื่อรายวันไม่สำเร็จ:', error);
+      setDailyAttendance([]);
+    } finally {
+      setLoadingDaily(false);
+    }
+  };
+
+  useEffect(() => {
+    if (courseSubTab === 'daily' && courseId && selectedDate) {
+      fetchDailyAttendance(selectedDate);
+    }
+  }, [courseSubTab, selectedDate, courseId]);
+
+  // คำนวณสถิติรายวัน
+  const dailyStats = {
+    total: studentList.length,
+    present: dailyAttendance.filter(a => a.status?.toUpperCase() === 'PRESENT').length,
+    late: dailyAttendance.filter(a => a.status?.toUpperCase() === 'LATE').length,
+    absent: dailyAttendance.filter(a => a.status?.toUpperCase() === 'ABSENT').length,
+  };
+  // คนที่ยังไม่ได้เช็คชื่อ = ขาด
+  dailyStats.notChecked = dailyStats.total - (dailyStats.present + dailyStats.late + dailyStats.absent);
+
+  // merge studentList กับ dailyAttendance เพื่อแสดงในตาราง
+  const dailyStudentRows = studentList.map(s => {
+    const record = dailyAttendance.find(a =>
+      a.studentId === s.studentUserId || a.studentId === s.id || a.userId === s.studentUserId
+    );
+    return {
+      ...s,
+      attendanceStatus: record?.status?.toLowerCase() || null,
+      checkedTime: record?.checkedAt
+        ? new Date(record.checkedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+        : '-',
+    };
+  });
+
+  // --- filter + progress + export สำหรับสถิติรายวัน ---
+  const [dailyFilter, setDailyFilter] = useState('all');
+  const checkedCount = dailyStats.present + dailyStats.late + dailyStats.absent;
+  const checkedPercent = dailyStats.total > 0 ? Math.round((checkedCount / dailyStats.total) * 100) : 0;
+
+  const filteredDailyRows = dailyFilter === 'all'
+    ? dailyStudentRows
+    : dailyStudentRows.filter(r => {
+        if (dailyFilter === 'present') return r.attendanceStatus === 'present';
+        if (dailyFilter === 'late') return r.attendanceStatus === 'late';
+        if (dailyFilter === 'absent') return r.attendanceStatus === 'absent' || !r.attendanceStatus;
+        return true;
+      });
+
+  const exportDailyCSV = () => {
+    const statusLabel = (s) => s === 'present' ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : 'ขาดเรียน';
+    const header = 'ลำดับ,รหัสนักศึกษา,ชื่อ-สกุล,เวลาเช็คชื่อ,สถานะ';
+    const rows = filteredDailyRows.map((r, i) =>
+      `${i + 1},${r.studentId || '-'},${r.name},${r.checkedTime},${statusLabel(r.attendanceStatus)}`
+    );
+    const csvContent = '\uFEFF' + [header, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `attendance_${courseInfo.code}_${selectedDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const [riskAlerts, setRiskAlerts] = useState([
     { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' },
     { id: 2, studentId: '640005', studentName: 'นายสมชาย มุ่งมั่น', issue: 'มาสายติดต่อกัน 3 คาบ', status: 'pending' }
@@ -135,6 +242,26 @@ export default function TeacherCourseDetail() {
   const [editLocationForm, setEditLocationForm] = useState(locationSettings);
 
   const [isClassCanceled, setIsClassCanceled] = useState(false);
+
+  // --- States สำหรับกำหนดวันที่มีเช็คชื่อ (scheduledDates ย้ายไปด้านบนแล้ว) ---
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showAddDateModal, setShowAddDateModal] = useState(false);
+  const [newDateForm, setNewDateForm] = useState({ date: '', note: '' });
+  const [dateToDelete, setDateToDelete] = useState(null);
+  const WEEKDAYS = [
+    { id: 0, label: 'อา', full: 'อาทิตย์' },
+    { id: 1, label: 'จ', full: 'จันทร์' },
+    { id: 2, label: 'อ', full: 'อังคาร' },
+    { id: 3, label: 'พ', full: 'พุธ' },
+    { id: 4, label: 'พฤ', full: 'พฤหัสบดี' },
+    { id: 5, label: 'ศ', full: 'ศุกร์' },
+    { id: 6, label: 'ส', full: 'เสาร์' },
+  ];
+  const [generateForm, setGenerateForm] = useState({
+    selectedDays: [],    // e.g. [1, 3] = จันทร์, พุธ
+    startDate: '',       // วันเริ่มเทอม
+    endDate: '',         // วันสิ้นสุดเทอม
+  });
 
   // --- Modal States ---
   const [showSetTimeModal, setShowSetTimeModal] = useState(false);
@@ -163,6 +290,89 @@ export default function TeacherCourseDetail() {
     setShowSendAlertModal(false);
     setAlertToSend(null);
     alert('ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว');
+  };
+
+  // --- ฟังก์ชันจัดการวันที่มีเช็คชื่อ ---
+
+  // สร้างวันที่อัตโนมัติจากรูปแบบ (เลือกวัน + ช่วงเทอม)
+  const handleGenerateDates = () => {
+    const { selectedDays, startDate, endDate } = generateForm;
+    if (selectedDays.length === 0) return alert('กรุณาเลือกวันในสัปดาห์อย่างน้อย 1 วัน');
+    if (!startDate || !endDate) return alert('กรุณากำหนดวันเริ่มต้นและสิ้นสุดเทอม');
+    if (new Date(startDate) >= new Date(endDate)) return alert('วันเริ่มต้นต้องมาก่อนวันสิ้นสุด');
+
+    const generated = [];
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    while (current <= end) {
+      if (selectedDays.includes(current.getDay())) {
+        const dateStr = current.toISOString().split('T')[0];
+        generated.push({ id: Date.now() + generated.length, date: dateStr, note: '', auto: true });
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    if (generated.length === 0) return alert('ไม่พบวันที่ตรงกับเงื่อนไข');
+
+    // merge กับวันที่มีอยู่แล้ว (ไม่ซ้ำ)
+    setScheduledDates(prev => {
+      const existingDates = new Set(prev.map(d => d.date));
+      const newDates = generated.filter(d => !existingDates.has(d.date));
+      return [...prev, ...newDates].sort((a, b) => new Date(a.date) - new Date(b.date));
+    });
+
+    setShowGenerateModal(false);
+    alert(`เพิ่ม ${generated.length} วันเรียบร้อย`);
+  };
+
+  const toggleWeekday = (dayId) => {
+    setGenerateForm(prev => ({
+      ...prev,
+      selectedDays: prev.selectedDays.includes(dayId)
+        ? prev.selectedDays.filter(d => d !== dayId)
+        : [...prev.selectedDays, dayId]
+    }));
+  };
+
+  // เพิ่มวันเดี่ยว (สำหรับวันพิเศษ/ชดเชย)
+  const handleAddScheduledDate = () => {
+    if (!newDateForm.date) return alert('กรุณาเลือกวันที่');
+    if (scheduledDates.some(d => d.date === newDateForm.date)) {
+      return alert('วันที่นี้ถูกกำหนดไว้แล้ว');
+    }
+    setScheduledDates(prev => [...prev, { id: Date.now(), date: newDateForm.date, note: newDateForm.note, auto: false }]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+    );
+    setNewDateForm({ date: '', note: '' });
+    setShowAddDateModal(false);
+  };
+
+  const handleRemoveScheduledDate = (dateId) => {
+    setScheduledDates(prev => prev.filter(d => d.id !== dateId));
+    setDateToDelete(null);
+  };
+
+  const handleClearAllDates = () => {
+    if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
+      setScheduledDates([]);
+    }
+  };
+
+  const formatThaiDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const isDatePast = (dateStr) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(dateStr) < today;
+  };
+
+  const isDateToday = (dateStr) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr === today;
   };
 
   return (
@@ -252,16 +462,107 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* ตั้งค่าเวลา */}
+              {/* กำหนดเวลาและวันที่เช็คชื่อ (รวมกัน) */}
               <div>
                 <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600"/> กำหนดเวลาเช็คชื่อ</h4>
+                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600"/> กำหนดเวลาและวันที่เช็คชื่อ</h4>
                   <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm">แก้ไขเวลา</button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                {/* เวลาเช็คชื่อ */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
                   <div className="border border-green-200 bg-green-50 p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-sm block mb-1">ตรงเวลา (เริ่มคลาส)</span><span className="text-2xl font-bold text-green-800">{courseTimeSettings.start} น.</span></div>
                   <div className="border border-yellow-200 bg-yellow-50 p-5 rounded-xl shadow-sm"><span className="text-yellow-600 font-bold text-sm block mb-1">สาย (หลังจากเวลา)</span><span className="text-2xl font-bold text-yellow-800">{courseTimeSettings.late} น.</span></div>
                   <div className="border border-red-200 bg-red-50 p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-sm block mb-1">ขาดเรียน (หลังจากเวลา)</span><span className="text-2xl font-bold text-red-800">{courseTimeSettings.absent} น.</span></div>
+                </div>
+
+                {/* วันที่มีเช็คชื่อ */}
+                <div className="border-t border-slate-100 pt-5">
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5">
+                      <div>
+                        <p className="text-[15px] font-bold text-slate-700 flex items-center">
+                          <Calendar size={18} className="mr-2 text-indigo-500"/> วันที่เปิดให้เช็คชื่อ
+                          {scheduledDates.length > 0 && <span className="ml-2 bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">{scheduledDates.length} วัน</span>}
+                        </p>
+                        <p className="text-sm text-slate-500 mt-1">กำหนดตารางทั้งเทอม หรือเพิ่มวันพิเศษได้จากส่วนนี้</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2.5 w-full lg:w-auto">
+                        <button onClick={() => { setGenerateForm({ selectedDays: [], startDate: '', endDate: '' }); setShowGenerateModal(true); }} className="text-sm bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition shadow-sm flex items-center justify-center min-w-[170px]">
+                          <Sparkles size={15} className="mr-2"/> สร้างตารางอัตโนมัติ
+                        </button>
+                        <button onClick={() => { setNewDateForm({ date: '', note: '' }); setShowAddDateModal(true); }} className="text-sm bg-white text-indigo-600 border border-indigo-200 font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-50 transition shadow-sm flex items-center justify-center min-w-[140px]">
+                          <Plus size={15} className="mr-1.5"/> เพิ่มวันเดี่ยว
+                        </button>
+                        {scheduledDates.length > 0 && (
+                          <button onClick={handleClearAllDates} className="text-sm bg-white text-red-500 border border-red-200 font-bold px-4 py-2.5 rounded-xl hover:bg-red-50 transition shadow-sm flex items-center justify-center min-w-[130px]">
+                            <Trash2 size={15} className="mr-1.5"/> ล้างทั้งหมด
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {scheduledDates.length === 0 ? (
+                      <div className="bg-white border border-slate-200 border-dashed rounded-2xl p-10 text-center">
+                        <Calendar size={36} className="mx-auto text-slate-300 mb-3" />
+                        <p className="font-bold text-slate-500 text-base">ยังไม่มีวันที่กำหนดเช็คชื่อ</p>
+                        <p className="text-slate-400 text-sm mt-2 leading-relaxed">กดปุ่ม <span className="font-bold text-indigo-600">"สร้างตารางอัตโนมัติ"</span> เพื่อเลือกวันในสัปดาห์ + ช่วงเทอม<br/>หรือกด "เพิ่มวันเดี่ยว" สำหรับวันพิเศษ เช่น สอนชดเชย</p>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* สรุปจำนวน */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                          <div className="bg-white border border-indigo-100 rounded-2xl px-5 py-4 text-center shadow-sm">
+                            <p className="text-3xl font-extrabold text-indigo-700 leading-none">{scheduledDates.filter(d => !isDatePast(d.date)).length}</p>
+                            <p className="text-xs font-bold text-indigo-500 mt-2 uppercase tracking-wide">วันที่เหลือ</p>
+                          </div>
+                          <div className="bg-white border border-emerald-100 rounded-2xl px-5 py-4 text-center shadow-sm">
+                            <p className="text-3xl font-extrabold text-emerald-700 leading-none">{scheduledDates.filter(d => isDatePast(d.date)).length}</p>
+                            <p className="text-xs font-bold text-emerald-500 mt-2 uppercase tracking-wide">ผ่านไปแล้ว</p>
+                          </div>
+                          <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 text-center shadow-sm">
+                            <p className="text-3xl font-extrabold text-slate-700 leading-none">{scheduledDates.length}</p>
+                            <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-wide">ทั้งหมด</p>
+                          </div>
+                        </div>
+
+                        {/* รายการวัน */}
+                        <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                          {scheduledDates.map((item, idx) => {
+                            const past = isDatePast(item.date);
+                            const today = isDateToday(item.date);
+                            return (
+                              <div key={item.id} className={`flex items-center justify-between px-5 py-4 rounded-xl border shadow-sm transition-all ${today ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200' : past ? 'bg-white border-slate-200 opacity-55' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
+                                <div className="flex items-center gap-4">
+                                  <span className={`text-xs font-bold w-7 text-center ${past ? 'text-slate-400' : 'text-slate-500'}`}>{idx + 1}</span>
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${today ? 'bg-indigo-600 text-white' : past ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
+                                    <Calendar size={16} />
+                                  </div>
+                                  <div>
+                                    <p className={`font-bold text-[15px] ${today ? 'text-indigo-800' : past ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+                                      {formatThaiDate(item.date)}
+                                      {today && <span className="ml-2 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">วันนี้</span>}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">{item.note || (item.auto ? 'สร้างอัตโนมัติจากตารางเรียน' : 'เพิ่มเองแบบกำหนดวันพิเศษ')}</p>
+                                  </div>
+                                </div>
+                                <button onClick={() => setDateToDelete(item)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ลบวัน">
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 text-xs text-slate-500 font-medium border-t border-slate-200 mt-4">
+                          <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded"></div> วันนี้</span>
+                          <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-100 border border-indigo-200 rounded"></div> กำลังจะถึง</span>
+                          <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded"></div> ผ่านไปแล้ว</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -356,40 +657,214 @@ export default function TeacherCourseDetail() {
           {/* TAB 3: สถิติรายวัน */}
           {courseSubTab === 'daily' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex flex-col md:flex-row justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <h4 className="font-bold text-slate-800 mb-3 md:mb-0">รายงานสถิติประจำวัน</h4>
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg px-3 py-2 shadow-sm">
-                  <Calendar size={16} className="text-slate-400 mr-2"/>
-                  <input type="date" defaultValue="2026-03-19" className="text-sm text-slate-700 outline-none font-medium" />
+
+              {/* กรณียังไม่มีวันเช็คชื่อ */}
+              {scheduledDates.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <Calendar size={40} className="mx-auto text-slate-300 mb-4" />
+                  <p className="font-bold text-slate-600 text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
+                  <p className="text-slate-500 text-sm mt-2">ไปที่ Tab <span className="font-bold text-purple-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
+                  <button onClick={() => setCourseSubTab('info')} className="mt-5 bg-purple-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm text-sm">
+                    ไปกำหนดวันเช็คชื่อ
+                  </button>
+                </div>
+              ) : (<>
+
+              {/* Header + Date Navigator + Export */}
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                      รายงานสถิติประจำวัน
+                      {selectedDate === todayStr && scheduledDateList.includes(todayStr) && (
+                        <span className="flex items-center gap-1.5 text-xs bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-full">
+                          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> LIVE
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {selectedDate === todayStr ? 'กำลังแสดงผลวันนี้' : `วันที่ ${formatThaiDate(selectedDate)}`}
+                      {selectedDateIndex >= 0 && <span className="ml-2 text-indigo-600 font-bold">ครั้งที่ {selectedDateIndex + 1}/{scheduledDateList.length}</span>}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    {selectedDate === todayStr && (
+                      <button onClick={() => fetchDailyAttendance(selectedDate)} className="text-sm bg-white text-slate-600 border border-slate-300 font-bold px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center">
+                        <RefreshCw size={14} className="mr-1.5"/> รีเฟรช
+                      </button>
+                    )}
+                    <button onClick={exportDailyCSV} className="text-sm bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center">
+                      <Download size={14} className="mr-1.5"/> ส่งออก CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Navigator — เลือกจากวันที่เปิดเช็คชื่อเท่านั้น */}
+                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-200">
+                  <button onClick={goPrevDate} disabled={!hasPrevDate} className={`p-2 rounded-lg border transition ${hasPrevDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}>
+                    <ChevronLeft size={18} />
+                  </button>
+
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-xl px-5 py-2.5 shadow-sm">
+                      <Calendar size={16} className="text-indigo-500" />
+                      <select
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer pr-2"
+                      >
+                        {scheduledDateList.map((d, i) => (
+                          <option key={d} value={d}>
+                            {formatThaiDate(d)}{d === todayStr ? ' (วันนี้)' : ''} — ครั้งที่ {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button onClick={goNextDate} disabled={!hasNextDate} className={`p-2 rounded-lg border transition ${hasNextDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}>
+                    <ChevronRight size={18} />
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold uppercase mb-1">นักศึกษาทั้งหมด</p><p className="text-3xl font-bold text-slate-800">30</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-3xl font-bold text-green-600">25</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-3xl font-bold text-yellow-600">3</p></div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-3xl font-bold text-red-500">2</p></div>
-              </div>
+              {/* Progress Bar */}
+              {!loadingDaily && dailyStats.total > 0 && (
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="flex justify-between items-center mb-2.5">
+                    <p className="text-sm font-bold text-slate-700">ความคืบหน้าการเช็คชื่อ</p>
+                    <p className="text-sm font-bold text-slate-800">{checkedCount}/{dailyStats.total} คน <span className={`ml-1 ${checkedPercent === 100 ? 'text-emerald-600' : 'text-slate-500'}`}>({checkedPercent}%)</span></p>
+                  </div>
+                  <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex">
+                    {dailyStats.present > 0 && (
+                      <div className="bg-green-500 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.present / dailyStats.total) * 100}%` }}>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.present}</span>
+                      </div>
+                    )}
+                    {dailyStats.late > 0 && (
+                      <div className="bg-yellow-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.late / dailyStats.total) * 100}%` }}>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.late}</span>
+                      </div>
+                    )}
+                    {(dailyStats.absent + dailyStats.notChecked) > 0 && (
+                      <div className="bg-red-400 h-full transition-all duration-500 relative group" style={{ width: `${((dailyStats.absent + dailyStats.notChecked) / dailyStats.total) * 100}%` }}>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.absent + dailyStats.notChecked}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-5 mt-2.5 text-xs font-medium text-slate-500">
+                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded"></div> ตรงเวลา ({dailyStats.present})</span>
+                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-yellow-400 rounded"></div> สาย ({dailyStats.late})</span>
+                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-400 rounded"></div> ขาดเรียน ({dailyStats.absent + dailyStats.notChecked})</span>
+                  </div>
+                </div>
+              )}
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-sm">
-                  <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
-                    <tr><th className="py-3 px-4 font-semibold w-24">รหัส</th><th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th><th className="py-3 px-4 font-semibold text-center">สถานะการเช็คชื่อวันนี้</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {studentList.map(student => (
-                      <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 text-slate-600">{student.id}</td>
-                        <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
-                        <td className="py-3 px-4 text-center">
-                          <StatusBadge status={student.status} />
-                          {student.time !== '-' && <span className="text-xs text-slate-400 ml-2">({student.time} น.)</span>}
-                        </td>
-                      </tr>
+              {/* สรุปสถิติ 4 การ์ด */}
+              {loadingDaily ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 text-center animate-pulse">
+                      <div className="h-3 w-20 bg-slate-100 rounded mx-auto mb-3"></div>
+                      <div className="h-8 w-12 bg-slate-100 rounded mx-auto"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 text-center">
+                    <p className="text-slate-500 text-xs font-bold uppercase mb-1">นักศึกษาทั้งหมด</p>
+                    <p className="text-3xl font-bold text-slate-800">{dailyStats.total}</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center">
+                    <p className="text-green-600 text-xs font-bold uppercase mb-1">ตรงเวลา</p>
+                    <p className="text-3xl font-bold text-green-600">{dailyStats.present}</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center">
+                    <p className="text-yellow-600 text-xs font-bold uppercase mb-1">มาสาย</p>
+                    <p className="text-3xl font-bold text-yellow-600">{dailyStats.late}</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center">
+                    <p className="text-red-500 text-xs font-bold uppercase mb-1">ขาดเรียน</p>
+                    <p className="text-3xl font-bold text-red-500">{dailyStats.absent + dailyStats.notChecked}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Filter Tabs + ตาราง */}
+              {loadingDaily ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto"></div>
+                  <p className="text-slate-500 text-sm mt-3 font-medium">กำลังโหลดข้อมูล...</p>
+                </div>
+              ) : dailyStudentRows.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <Users size={32} className="mx-auto text-slate-300 mb-3" />
+                  <p className="font-bold text-slate-500">ยังไม่มีนักศึกษาในคลาสนี้</p>
+                </div>
+              ) : (
+                <div>
+                  {/* Filter Tabs */}
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <Filter size={14} className="text-slate-400"/>
+                    {[
+                      { key: 'all', label: 'ทั้งหมด', count: dailyStudentRows.length },
+                      { key: 'present', label: 'ตรงเวลา', count: dailyStats.present, color: 'green' },
+                      { key: 'late', label: 'สาย', count: dailyStats.late, color: 'yellow' },
+                      { key: 'absent', label: 'ขาดเรียน', count: dailyStats.absent + dailyStats.notChecked, color: 'red' },
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setDailyFilter(f.key)}
+                        className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${
+                          dailyFilter === f.key
+                            ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300'
+                            : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
+                            : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300'
+                            : 'bg-purple-50 text-purple-700 border-purple-300'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {f.label} <span className="ml-1 opacity-70">({f.count})</span>
+                      </button>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+
+                  {/* ตาราง */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4 font-semibold w-16 text-center">#</th>
+                          <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
+                          <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
+                          <th className="py-3 px-4 font-semibold text-center">เวลาเช็คชื่อ</th>
+                          <th className="py-3 px-4 font-semibold text-center">สถานะ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredDailyRows.map((row, idx) => (
+                          <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-3 px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
+                            <td className="py-3 px-4 text-slate-600 font-mono text-xs">{row.studentId || '-'}</td>
+                            <td className="py-3 px-4 text-slate-800 font-medium">{row.name}</td>
+                            <td className="py-3 px-4 text-center text-slate-600 text-sm font-medium">{row.checkedTime}</td>
+                            <td className="py-3 px-4 text-center">
+                              <StatusBadge status={row.attendanceStatus} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* จำนวนผลลัพธ์ */}
+                  {dailyFilter !== 'all' && (
+                    <p className="text-xs text-slate-500 font-medium mt-2">แสดง {filteredDailyRows.length} จาก {dailyStudentRows.length} คน</p>
+                  )}
+                </div>
+              )}
+              </>)}
             </div>
           )}
 
@@ -603,6 +1078,142 @@ export default function TeacherCourseDetail() {
             <div className="flex space-x-3">
               <button onClick={() => setStudentToDelete(null)} className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-200">ยกเลิก</button>
               <button onClick={handleDeleteStudent} className="flex-1 bg-red-500 text-white py-2.5 rounded-lg font-bold hover:bg-red-600">ยืนยันลบ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal สร้างตารางอัตโนมัติ */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
+            <button onClick={() => setShowGenerateModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
+            <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center"><Sparkles size={20} className="mr-2 text-indigo-600"/> สร้างตารางเช็คชื่ออัตโนมัติ</h3>
+            <p className="text-sm text-slate-500 mb-6">เลือกวันในสัปดาห์ที่มีคลาส และกำหนดช่วงเทอม ระบบจะสร้างวันเช็คชื่อให้ทั้งหมด</p>
+
+            {/* เลือกวันในสัปดาห์ */}
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-slate-700 mb-2.5 uppercase tracking-wide">เลือกวันในสัปดาห์ที่มีคลาสเรียน *</label>
+              <div className="flex gap-2">
+                {WEEKDAYS.map(day => (
+                  <button
+                    key={day.id}
+                    onClick={() => toggleWeekday(day.id)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                      generateForm.selectedDays.includes(day.id)
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-105'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+              {generateForm.selectedDays.length > 0 && (
+                <p className="text-xs text-indigo-600 font-medium mt-2">
+                  เลือก: {generateForm.selectedDays.sort((a,b) => a-b).map(id => WEEKDAYS.find(w => w.id === id)?.full).join(', ')}
+                </p>
+              )}
+            </div>
+
+            {/* ช่วงวันที่ */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">วันเริ่มต้นเทอม *</label>
+                <input
+                  type="date"
+                  value={generateForm.startDate}
+                  onChange={(e) => setGenerateForm({ ...generateForm, startDate: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">วันสิ้นสุดเทอม *</label>
+                <input
+                  type="date"
+                  value={generateForm.endDate}
+                  onChange={(e) => setGenerateForm({ ...generateForm, endDate: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Preview จำนวนวัน */}
+            {generateForm.selectedDays.length > 0 && generateForm.startDate && generateForm.endDate && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-6 text-center">
+                <p className="text-sm text-indigo-800 font-bold">
+                  จะสร้างประมาณ {(() => {
+                    let count = 0;
+                    const cur = new Date(generateForm.startDate);
+                    const end = new Date(generateForm.endDate);
+                    while (cur <= end) {
+                      if (generateForm.selectedDays.includes(cur.getDay())) count++;
+                      cur.setDate(cur.getDate() + 1);
+                    }
+                    return count;
+                  })()} วัน
+                </p>
+              </div>
+            )}
+
+            <div className="flex space-x-3">
+              <button onClick={() => setShowGenerateModal(false)} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
+              <button onClick={handleGenerateDates} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center">
+                <Sparkles size={16} className="mr-2"/> สร้างตาราง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal เพิ่มวันเดี่ยว (วันพิเศษ/ชดเชย) */}
+      {showAddDateModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
+            <button onClick={() => setShowAddDateModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
+            <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center"><Plus size={20} className="mr-2 text-indigo-600"/> เพิ่มวันเดี่ยว</h3>
+            <p className="text-sm text-slate-500 mb-5">สำหรับวันพิเศษ เช่น สอนชดเชย หรือสอบกลางภาค</p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">วันที่ *</label>
+                <input
+                  type="date"
+                  value={newDateForm.date}
+                  onChange={(e) => setNewDateForm({ ...newDateForm, date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">หมายเหตุ (ไม่บังคับ)</label>
+                <input
+                  type="text"
+                  placeholder="เช่น สอบกลางภาค, ชดเชยเรียน"
+                  value={newDateForm.note}
+                  onChange={(e) => setNewDateForm({ ...newDateForm, note: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3">
+              <button onClick={() => setShowAddDateModal(false)} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
+              <button onClick={handleAddScheduledDate} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md">เพิ่มวันที่</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ยืนยันลบวันที่เช็คชื่อ */}
+      {dateToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32} /></div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">ลบวันเช็คชื่อ?</h3>
+            <p className="text-slate-500 text-sm mb-1 font-semibold">{formatThaiDate(dateToDelete.date)}</p>
+            {dateToDelete.note && <p className="text-slate-400 text-xs mb-1">{dateToDelete.note}</p>}
+            <p className="text-slate-400 text-xs mb-6">นักศึกษาจะไม่สามารถสแกนหน้าในวันนี้ได้อีก</p>
+            <div className="flex space-x-3">
+              <button onClick={() => setDateToDelete(null)} className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-200">ยกเลิก</button>
+              <button onClick={() => handleRemoveScheduledDate(dateToDelete.id)} className="flex-1 bg-red-500 text-white py-2.5 rounded-lg font-bold hover:bg-red-600">ยืนยันลบ</button>
             </div>
           </div>
         </div>

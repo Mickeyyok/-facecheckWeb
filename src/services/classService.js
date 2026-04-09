@@ -19,6 +19,14 @@ export const classService = {
     return response.data;
   },
 
+  // ==========================================
+  // ✅ เพิ่มใหม่: อัปเดตคลาส (พิกัด, เวลา, ข้อมูลทั่วไป)
+  // ==========================================
+  updateClass: async (classId, classData) => {
+    const response = await api.put(`/classes/${classId}`, classData);
+    return response.data;
+  },
+
   // ลบคลาส
   deleteClass: async (classId) => {
     const response = await api.delete(`/classes/${classId}`);
@@ -57,6 +65,14 @@ export const classService = {
     return response.data;
   },
 
+  // ==========================================
+  // ✅ เพิ่มใหม่: แจ้งเตือนเปิดระบบเช็คชื่อให้นักศึกษา
+  // ==========================================
+  notifyStartCheckIn: async (classId) => {
+    const response = await api.post(`/notifications/start-checkin/${classId}`);
+    return response.data;
+  },
+
   // ดึงรายวิชาของนักศึกษาตาม User ID
   getClassesByStudent: async (studentId) => {
     try {
@@ -70,7 +86,7 @@ export const classService = {
   },
 
   // ==========================================
-  // ใหม! สำหรับให้นักศึกษากดเข้าร่วมคลาส
+  // สำหรับให้นักศึกษากดเข้าร่วมคลาส
   // ==========================================
   joinClass: async (subjectCode, studentId) => {
     try {
@@ -81,6 +97,5 @@ export const classService = {
       throw error.response?.data || { message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
     }
   }
+  
 };
-
-

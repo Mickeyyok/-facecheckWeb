@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, BookOpen, History, Bell, LogOut, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import utccLogo from '../../assets/UTCC-Official-1.png';
 import { notificationService } from '../../services/notificationService';
 
 export default function MainLayout({ role }) {
@@ -25,7 +26,7 @@ export default function MainLayout({ role }) {
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-20 shadow-xl">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
-          <img src="/src/assets/UTCC-Official-1.png" alt="UTCC Logo" className="w-10 h-10 object-contain relative z-10 drop-shadow-sm inline-block alignment-adjust" />
+          <img src={utccLogo} alt="UTCC Logo" className="w-10 h-10 object-contain relative z-10 drop-shadow-sm inline-block alignment-adjust" />
           <span className="text-xl font-bold tracking-wide">FaceCheck</span>
         </div>
         

@@ -3,6 +3,7 @@ import { Camera, User, Users, CheckCircle, X } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
+import utccLogo from '../../assets/UTCC-Official-1.png';
 
 export default function Login() {
   const { login } = useAuth();
@@ -189,7 +190,7 @@ export default function Login() {
         
         {/* Left Branding */}
         <div className="hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center bg-[#1a237e] relative overflow-hidden">
-          <img src="/src/assets/UTCC-Official-1.png" alt="Logo" className="mb-6 w-44 object-contain z-10 drop-shadow-lg" />
+          <img src={utccLogo} alt="Logo" className="mb-6 w-44 object-contain z-10 drop-shadow-lg" />
           <h1 className="text-4xl font-black z-10 tracking-tight">FaceCheck UTCC</h1>
           <p className="z-10 mt-4 opacity-80 text-center font-medium">Smart Attendance & Geo-Location System</p>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>

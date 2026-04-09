@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // สร้างตัวแทน (Instance) สำหรับเรียก API ไปที่ Spring Boot
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api', // URL เริ่มต้นของ Spring Boot
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api',
   headers: {
     'Content-Type': 'application/json',
   },

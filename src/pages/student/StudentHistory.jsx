@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function StudentHistory() {
@@ -10,7 +10,7 @@ export default function StudentHistory() {
     // ดึงประวัติการเข้าเรียนจาก Backend
     const fetchHistory = async () => {
       try {
-        const res = await axios.get(`http://localhost:8080/api/attendance/student/${user.id}`);
+        const res = await api.get(`/attendance/student/${user.id}`);
         setHistory(res.data);
       } catch (err) {
         console.error("ดึงประวัติไม่สำเร็จ", err);

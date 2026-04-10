@@ -13,6 +13,12 @@ export const classService = {
     return response.data;
   },
 
+  // อัปเดตคลาส
+  updateClass: async (classId, classData) => {
+    const response = await api.put(`/classes/${classId}`, classData);
+    return response.data;
+  },
+
   // ดึงคลาสทั้งหมดของอาจารย์
   getClassesByTeacher: async (teacherId) => {
     const response = await api.get(`/classes/teacher/${teacherId}`);

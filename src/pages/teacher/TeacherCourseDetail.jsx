@@ -136,6 +136,16 @@ export default function TeacherCourseDetail() {
             setScheduledDates(JSON.parse(data.scheduledDatesJson));
           } catch(e) {}
         }
+        
+        // โหลด scheduledDates ที่เซฟไว้จาก backend
+        if (data.scheduledDates) {
+          try {
+            const parsedDates = JSON.parse(data.scheduledDates);
+            setScheduledDates(parsedDates);
+          } catch(err) {
+            console.error('Error parsing scheduled dates:', err);
+          }
+        }
       } catch (error) {
         console.error('ดึงข้อมูลคลาสไม่สำเร็จ:', error);
       } finally {
@@ -172,6 +182,70 @@ export default function TeacherCourseDetail() {
     }
   }, [courseSubTab, selectedDate, courseId]);
 
+  // --- States สำหรับสถิติรายเทอม ---
+  const [termAttendance, setTermAttendance] = useState([]);
+  const [loadingTerm, setLoadingTerm] = useState(false);
+
+  useEffect(() => {
+    if (courseSubTab === 'term' && courseId) {
+      const fetchTermAttendance = async () => {
+        try {
+          setLoadingTerm(true);
+          const data = await attendanceService.getAttendanceByClass(courseId);
+          setTermAttendance(data);
+        } catch (error) {
+          console.error('ดึงข้อมูลรายเทอมไม่สำเร็จ:', error);
+          setTermAttendance([]);
+        } finally {
+          setLoadingTerm(false);
+        }
+      };
+      fetchTermAttendance();
+    }
+  }, [courseSubTab, courseId]);
+
+  let termTrendData = [];
+  let termAvgPercent = 0;
+  let studentsAbsentStats = [];
+
+  if (courseSubTab === 'term') {
+    const datesSet = new Set();
+    termAttendance.forEach(a => {
+      if (a.checkedAt) datesSet.add(a.checkedAt.split('T')[0]);
+    });
+    const dates = Array.from(datesSet).sort();
+    const totalStudents = studentList.length || 1;
+
+    studentsAbsentStats = studentList.map(s => {
+      let absentCount = dates.length;
+      dates.forEach(d => {
+        const record = termAttendance.find(a => 
+          (a.studentId === s.studentUserId || a.studentId === s.id || a.userId === s.studentUserId) && 
+          a.checkedAt && a.checkedAt.startsWith(d)
+        );
+        if (record && record.status?.toUpperCase() !== 'ABSENT') {
+          absentCount--;
+        }
+      });
+      return { ...s, absentCount };
+    }).filter(s => s.absentCount > 0).sort((a,b) => b.absentCount - a.absentCount);
+
+    let sumPercent = 0;
+    termTrendData = dates.map((d, index) => {
+      let presentLateCount = 0;
+      termAttendance.forEach(a => {
+        if (a.checkedAt && a.checkedAt.startsWith(d)) {
+          const st = a.status?.toUpperCase();
+          if (st === 'PRESENT' || st === 'LATE') presentLateCount++;
+        }
+      });
+      const percent = Math.round((presentLateCount / totalStudents) * 100);
+      sumPercent += percent;
+      return { label: `W${index + 1}`, date: d, percent, isLow: percent < 80 };
+    });
+
+    termAvgPercent = dates.length > 0 ? Math.round(sumPercent / dates.length) : 0;
+  }
 
   // ==========================================
   // 3. คำนวณสถิติและจัดกลุ่ม
@@ -394,6 +468,28 @@ export default function TeacherCourseDetail() {
     }
   };
 
+  const handleSaveTimeSettings = async () => {
+    try {
+      const [sh, sm] = editTimeForm.start.split(':').map(Number);
+      const [lh, lm] = editTimeForm.late.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const lateMin = lh * 60 + lm;
+      const threshold = lateMin - startMin > 0 ? lateMin - startMin : 15;
+
+      const payload = {
+        startTime: editTimeForm.start,
+        endTime: editTimeForm.absent,
+        lateThresholdMinutes: threshold
+      };
+
+      await classService.updateClass(courseId, payload);
+      setCourseTimeSettings(editTimeForm);
+      setShowSetTimeModal(false);
+    } catch(err) {
+      alert('บันทึกไม่สำเร็จ: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleSendAlertToStudent = () => {
     setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
     setShowSendAlertModal(false);
@@ -412,15 +508,18 @@ export default function TeacherCourseDetail() {
   };
   const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
 
-  const saveDatesToDB = async (datesArray) => {
+  const saveScheduledDatesToBackend = async (newDates) => {
     try {
-      await classService.updateClass(courseId, {
-        ...courseInfo,
-        scheduledDatesJson: JSON.stringify(datesArray)
-      });
-    } catch (err) {}
+      await classService.updateClass(courseId, { scheduledDates: JSON.stringify(newDates) });
+      setScheduledDates(newDates);
+    } catch(err) {
+      console.error('Save dates error:', err);
+      alert('บันทึกวันเช็คชื่อลงฐานข้อมูลไม่สำเร็จ');
+      setScheduledDates(newDates); // fallback local
+    }
   };
 
+  // สร้างวันที่อัตโนมัติจากรูปแบบ (เลือกวัน + ช่วงเทอม)
   const handleGenerateDates = () => {
     const { selectedDays, startDate, endDate } = generateForm;
     if (selectedDays.length === 0) return alert('กรุณาเลือกวันในสัปดาห์อย่างน้อย 1 วัน');
@@ -438,13 +537,12 @@ export default function TeacherCourseDetail() {
     }
     if (generated.length === 0) return alert('ไม่พบวันที่ตรงกับเงื่อนไข');
 
-    setScheduledDates(prev => {
-      const existingDates = new Set(prev.map(d => d.date));
-      const newDates = generated.filter(d => !existingDates.has(d.date));
-      const finalDates = [...prev, ...newDates].sort((a, b) => new Date(a.date) - new Date(b.date));
-      saveDatesToDB(finalDates);
-      return finalDates;
-    });
+    // merge กับวันที่มีอยู่แล้ว (ไม่ซ้ำ)
+    const existingDates = new Set(scheduledDates.map(d => d.date));
+    const newDates = generated.filter(d => !existingDates.has(d.date));
+    const finalDates = [...scheduledDates, ...newDates].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    saveScheduledDatesToBackend(finalDates);
     setShowGenerateModal(false);
     alert(`เพิ่ม ${generated.length} วันเรียบร้อย ข้อมูลถูกบันทึกแล้ว!`);
   };
@@ -453,30 +551,27 @@ export default function TeacherCourseDetail() {
   
   const handleAddScheduledDate = () => {
     if (!newDateForm.date) return alert('กรุณาเลือกวันที่');
-    if (scheduledDates.some(d => d.date === newDateForm.date)) return alert('วันที่นี้ถูกกำหนดไว้แล้ว');
+    if (scheduledDates.some(d => d.date === newDateForm.date)) {
+      return alert('วันที่นี้ถูกกำหนดไว้แล้ว');
+    }
+    const finalDates = [...scheduledDates, { id: Date.now(), date: newDateForm.date, note: newDateForm.note, auto: false }]
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    setScheduledDates(prev => {
-      const finalDates = [...prev, { id: Date.now(), date: newDateForm.date, note: newDateForm.note, auto: false }].sort((a, b) => new Date(a.date) - new Date(b.date));
-      saveDatesToDB(finalDates);
-      return finalDates;
-    });
+    saveScheduledDatesToBackend(finalDates);
     setNewDateForm({ date: '', note: '' });
     setShowAddDateModal(false);
   };
 
-  const handleRemoveScheduledDate = (dateId) => { 
-    setScheduledDates(prev => {
-      const finalDates = prev.filter(d => d.id !== dateId);
-      saveDatesToDB(finalDates);
-      return finalDates;
-    });
-    setDateToDelete(null); 
+  const handleRemoveScheduledDate = (dateId) => {
+    const finalDates = scheduledDates.filter(d => d.id !== dateId);
+    saveScheduledDatesToBackend(finalDates);
+    setDateToDelete(null);
   };
   const handleClearAllDates = () => { 
     if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
-      setScheduledDates([]);
-      saveDatesToDB([]);
-    } 
+      saveScheduledDatesToBackend([]);
+    }
+  };
   };
 
   // ==========================================
@@ -899,12 +994,29 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
+<<<<<<< Updated upstream
+=======
+              
+              {loadingTerm ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+                  <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-4"></div>
+                  <p className="text-slate-500 font-medium">กำลังโหลดข้อมูลสถิติรายเทอม...</p>
+                </div>
+              ) : termTrendData.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+                  <BarChart2 size={48} className="mx-auto text-slate-300 mb-4" />
+                  <p className="text-slate-500 font-medium">ยังไม่มีข้อมูลการเช็คชื่อในระบบสำหรับเทอมนี้</p>
+                </div>
+              ) : (<>
+              {/* AI Summary Card */}
+>>>>>>> Stashed changes
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-6 shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
                 <div className="flex items-center justify-between mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
                   <div className="flex items-center space-x-3"><div className="bg-white p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100"><Sparkles size={22} className="fill-indigo-50" /></div><h4 className="text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
                   <span className="flex items-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-md"><Brain size={14} className="mr-1.5"/> วิเคราะห์โดย AI</span>
                 </div>
+<<<<<<< Updated upstream
                 <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">นักศึกษามีความรับผิดชอบในเกณฑ์ <span className="font-extrabold text-emerald-600 bg-white px-3 py-1 rounded-lg shadow-sm border border-emerald-100 mx-1">ดีเยี่ยม</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ 88%</p>
               </div>
 
@@ -916,6 +1028,25 @@ export default function TeacherCourseDetail() {
                       <div key={idx} className="flex flex-col items-center w-1/6">
                         <div className="w-full flex justify-center items-end h-32 relative"><div className="w-8 bg-slate-100 rounded-t-md absolute bottom-0 h-full"></div><div className={`w-8 rounded-t-md absolute bottom-0 transition-all ${idx === 3 ? 'bg-red-400' : 'bg-purple-500'}`} style={{height: `${val}%`}}></div></div>
                         <span className={`text-xs mt-2 ${idx === 3 ? 'font-bold text-red-500' : 'text-slate-500'}`}>W{idx+1}</span>
+=======
+                <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">
+                  นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-3 py-1 rounded-lg shadow-sm mx-1 ${termAvgPercent >= 80 ? 'text-emerald-600 bg-white border border-emerald-100' : 'text-yellow-600 bg-white border border-yellow-100'}`}>{termAvgPercent >= 80 ? 'ดีเยี่ยม' : termAvgPercent >= 60 ? 'ปานกลาง' : 'ควรปรับปรุง'}</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ {termAvgPercent}%
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm overflow-x-auto">
+                  <h4 className="font-bold text-slate-800 flex items-center mb-4 min-w-[300px]"><BarChart2 size={18} className="mr-2 text-purple-600"/> แนวโน้มการเข้าเรียนรายครั้ง</h4>
+                  <div className="flex items-end h-48 px-2 border-b border-slate-100 pb-2 min-w-[300px] gap-2 overflow-x-auto">
+                    {termTrendData.map((data, idx) => (
+                      <div key={idx} className="flex flex-col items-center flex-1 min-w-[40px]" title={`วันที่ ${data.date} (มาเรียน ${data.percent}%)`}>
+                        <div className="w-full flex justify-center items-end h-32 relative group">
+                          <div className="w-full max-w-[32px] bg-slate-100 rounded-t-md absolute bottom-0 h-full"></div>
+                          <div className={`w-full max-w-[32px] rounded-t-md absolute bottom-0 transition-all ${data.isLow ? 'bg-red-400 group-hover:bg-red-500' : 'bg-purple-500 group-hover:bg-purple-600'}`} style={{height: `${data.percent}%`}}></div>
+                          <span className="absolute -top-6 text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{data.percent}%</span>
+                        </div>
+                        <span className={`text-[10px] mt-2 truncate max-w-full ${data.isLow ? 'font-bold text-red-500' : 'text-slate-500'}`}>{data.label}</span>
+>>>>>>> Stashed changes
                       </div>
                     ))}
                   </div>
@@ -923,16 +1054,24 @@ export default function TeacherCourseDetail() {
 
                 <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                   <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังขาดเรียนสูงสุด</h4>
-                  <div className="space-y-4">
-                    {studentList.filter(s => s.absentCount > 0).sort((a,b)=>b.absentCount-a.absentCount).map(s => (
-                      <div key={s.id} className="flex justify-between items-center border-b border-slate-50 pb-2">
-                        <div><p className="text-sm font-bold text-slate-800">{s.name}</p><p className="text-xs text-slate-500">{s.id}</p></div>
-                        <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded">ขาด {s.absentCount} ครั้ง</span>
-                      </div>
-                    ))}
+                  <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2">
+                    {studentsAbsentStats.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-4">ไม่มีนักศึกษาที่ขาดเรียน</p>
+                    ) : (
+                      studentsAbsentStats.map(s => (
+                        <div key={s.id || s.studentUserId || s.studentId} className="flex justify-between items-center border-b border-slate-50 pb-2">
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                            <p className="text-xs text-slate-500">{s.studentId || s.id || '-'}</p>
+                          </div>
+                          <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded">ขาด {s.absentCount} ครั้ง</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
+              </>)}
             </div>
           )}
 
@@ -979,7 +1118,11 @@ export default function TeacherCourseDetail() {
               <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
               <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
+<<<<<<< Updated upstream
             <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 shadow-md">บันทึกเวลาเช็คชื่อ</button>
+=======
+            <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
+>>>>>>> Stashed changes
           </div>
         </div>
       )}

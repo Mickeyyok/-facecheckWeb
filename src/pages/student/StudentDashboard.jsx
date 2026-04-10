@@ -74,6 +74,29 @@ export default function StudentDashboard() {
   // วิชาที่กำลังจะเรียน (ให้เป็นวิชาแรกในลิสต์)
   const activeCourse = studentClasses.length > 0 ? studentClasses[0] : null;
 
+  // คำนวณว่าหมดเวลาเช็คชื่อหรือยัง
+  const isCheckInExpired = (() => {
+    if (!activeCourse || !activeCourse.startTime) return false;
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // คำนวณเวลาปิดรับเช็คชื่อ = startTime + (lateThreshold * 2)
+    const [startH, startM] = activeCourse.startTime.split(':').map(Number);
+    const lateThreshold = activeCourse.lateThresholdMinutes || 15;
+    const absentDeadline = startH * 60 + startM + (lateThreshold * 2);
+
+    // ถ้ามี endTime ก็ใช้เป็นลิมิตด้วย
+    let endMinutes = 24 * 60;
+    if (activeCourse.endTime) {
+      const [endH, endM] = activeCourse.endTime.split(':').map(Number);
+      endMinutes = endH * 60 + endM;
+    }
+
+    // ปิดรับเช็คชื่อเมื่อเลย absent deadline หรือ endTime
+    const cutoff = Math.min(absentDeadline, endMinutes);
+    return nowMinutes > cutoff;
+  })();
+
   // 2. ฟังก์ชันขอพิกัด GPS
   const getLocation = () => {
     return new Promise((resolve, reject) => {
@@ -279,6 +302,11 @@ export default function StudentDashboard() {
                       <div className="w-2 h-2 bg-rose-400 rounded-full mr-2 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>
                       ยกเลิกคลาสเรียนวันนี้
                     </span>
+                  ) : activeCourse && isCheckInExpired ? (
+                    <span className="bg-rose-500/20 text-rose-100 border border-rose-400/30 px-3.5 py-1.5 rounded-full text-xs font-bold backdrop-blur-md tracking-wider flex items-center">
+                      <div className="w-2 h-2 bg-rose-400 rounded-full mr-2 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>
+                      หมดเวลาเช็คชื่อแล้ว
+                    </span>
                   ) : activeCourse ? (
                     <span className="bg-white/10 px-3.5 py-1.5 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 tracking-wider flex items-center">
                       <div className="w-2 h-2 bg-emerald-400 rounded-full mr-2 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></div>
@@ -323,6 +351,10 @@ export default function StudentDashboard() {
               ) : isCheckedIn ? (
                 <div className="bg-emerald-500 text-white px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed shadow-lg border border-emerald-400">
                   <CheckCircle size={20} strokeWidth={2.5} /><span>เช็กชื่อเรียบร้อยแล้ว</span>
+                </div>
+              ) : activeCourse && isCheckInExpired ? (
+                <div className="bg-white/5 text-white/40 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed border border-white/10 backdrop-blur-sm">
+                  <XCircle size={20} strokeWidth={2.5} /><span>ปิดระบบเช็กชื่อแล้ว</span>
                 </div>
               ) : activeCourse ? (
                 <button onClick={handleCheckIn} className="bg-white text-[#2b4cdd] px-8 py-4 rounded-xl font-extrabold text-[16px] hover:bg-blue-50 shadow-xl flex items-center justify-center space-x-2.5 transform transition-all hover:-translate-y-1 hover:shadow-2xl active:scale-95 w-full sm:w-auto">

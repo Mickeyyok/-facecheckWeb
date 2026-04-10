@@ -206,7 +206,7 @@ export default function TeacherCourseDetail() {
 
   let termTrendData = [];
   let termAvgPercent = 0;
-  let studentsAbsentStats = [];
+  let termStudentStats = [];
 
   if (courseSubTab === 'term') {
     const datesSet = new Set();
@@ -216,19 +216,43 @@ export default function TeacherCourseDetail() {
     const dates = Array.from(datesSet).sort();
     const totalStudents = studentList.length || 1;
 
-    studentsAbsentStats = studentList.map(s => {
-      let absentCount = dates.length;
+    termStudentStats = studentList.map(s => {
+      let presentCount = 0;
+      let lateCount = 0;
+      let absentCount = dates.length; // Default to absent, subtract if record found
+
       dates.forEach(d => {
         const record = termAttendance.find(a => 
           (a.studentId === s.studentUserId || a.studentId === s.id || a.userId === s.studentUserId) && 
           a.checkedAt && a.checkedAt.startsWith(d)
         );
-        if (record && record.status?.toUpperCase() !== 'ABSENT') {
-          absentCount--;
+        if (record) {
+          const st = record.status?.toUpperCase();
+          if (st === 'PRESENT') {
+            presentCount++;
+            absentCount--;
+          } else if (st === 'LATE') {
+            lateCount++;
+            absentCount--;
+          } else if (st === 'ABSENT') {
+            // Remains absent
+          }
         }
       });
-      return { ...s, absentCount };
-    }).filter(s => s.absentCount > 0).sort((a,b) => b.absentCount - a.absentCount);
+      
+      const totalClasses = dates.length;
+      const attendedClasses = presentCount + lateCount;
+      const attendancePercent = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0;
+
+      return { 
+        ...s, 
+        presentCount, 
+        lateCount, 
+        absentCount, 
+        totalClasses,
+        attendancePercent
+      };
+    });
 
     let sumPercent = 0;
     termTrendData = dates.map((d, index) => {
@@ -361,34 +385,6 @@ export default function TeacherCourseDetail() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveTimeSettings = async () => {
-    try {
-      const [startH, startM] = editTimeForm.start.split(':').map(Number);
-      const [lateH, lateM] = editTimeForm.late.split(':').map(Number);
-      const startTotalMinutes = (startH * 60) + startM;
-      const lateTotalMinutes = (lateH * 60) + lateM;
-      const lateThreshold = lateTotalMinutes - startTotalMinutes;
-
-      if (lateThreshold <= 0) return alert("เวลา 'สาย' ต้องมากกว่าเวลา 'เริ่มคลาส' ครับ");
-
-      const payload = {
-        subjectName: courseInfo.name,
-        subjectCode: courseInfo.code,
-        instructorName: courseInfo.instructor,
-        room: courseInfo.room,
-        term: courseInfo.term,
-        startTime: editTimeForm.start,
-        lateThresholdMinutes: lateThreshold
-      };
-
-      await classService.updateClass(courseId, payload);
-      setCourseTimeSettings(editTimeForm);
-      setShowSetTimeModal(false);
-      alert("บันทึกเวลาเรียบร้อยแล้ว!");
-    } catch (error) {
-      alert("บันทึกเวลาไม่สำเร็จ: " + (error.response?.data?.message || error.message));
-    }
-  };
 
   const handleSetLocation = () => {
     if (!navigator.geolocation) return alert("เบราว์เซอร์ของคุณไม่รองรับการดึงพิกัด GPS");
@@ -571,7 +567,6 @@ export default function TeacherCourseDetail() {
     if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
       saveScheduledDatesToBackend([]);
     }
-  };
   };
 
   // ==========================================
@@ -865,14 +860,40 @@ export default function TeacherCourseDetail() {
           {/* TAB 3: สถิติรายวัน */}
           {courseSubTab === 'daily' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              {scheduledDates.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-                  <Calendar size={40} className="mx-auto text-slate-300 mb-4" />
-                  <p className="font-bold text-slate-600 text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
-                  <p className="text-slate-500 text-sm mt-2">ไปที่ Tab <span className="font-bold text-purple-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
-                  <button onClick={() => setCourseSubTab('info')} className="mt-5 bg-purple-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
+              {scheduledDates.length === 0 ? (<>
+                {/* แจ้งเตือนว่ายังไม่มีตาราง แต่ยังแสดงข้อมูลวันนี้ได้ */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <Calendar size={20} className="text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800">ยังไม่ได้กำหนดตารางวันเช็คชื่อ</p>
+                    <p className="text-xs text-amber-600 mt-0.5">ไปที่ Tab "ข้อมูลวิชา" เพื่อสร้างตารางอัตโนมัติ — แต่ยังสามารถดูสถิติรายวันได้จากด้านล่าง</p>
+                  </div>
+                  <button onClick={() => setCourseSubTab('info')} className="text-xs bg-amber-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-amber-700 transition shrink-0">ไปกำหนดตาราง</button>
                 </div>
-              ) : (<>
+
+                {/* แสดง date picker แบบ manual + ปุ่มดึงข้อมูล */}
+                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                        รายงานสถิติประจำวัน
+                        {selectedDate === todayStr && (
+                          <span className="flex items-center gap-1.5 text-xs bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-full"><span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> LIVE</span>
+                        )}
+                      </h4>
+                      <p className="text-sm text-slate-500 mt-0.5">{selectedDate === todayStr ? 'กำลังแสดงผลวันนี้' : `วันที่ ${formatThaiDate(selectedDate)}`}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                      <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-xl px-4 py-2 shadow-sm">
+                        <Calendar size={16} className="text-indigo-500" />
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer" />
+                      </div>
+                      <button onClick={() => fetchDailyAttendance(selectedDate)} className="text-sm bg-white text-slate-600 border border-slate-300 font-bold px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center"><RefreshCw size={14} className="mr-1.5"/> รีเฟรช</button>
+                      <button onClick={exportDailyCSV} className="text-sm bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center"><Download size={14} className="mr-1.5"/> ส่งออก CSV</button>
+                    </div>
+                  </div>
+                </div>
+              </>) : (<>
               <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                   <div>
@@ -994,8 +1015,6 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-<<<<<<< Updated upstream
-=======
               
               {loadingTerm ? (
                 <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
@@ -1009,66 +1028,58 @@ export default function TeacherCourseDetail() {
                 </div>
               ) : (<>
               {/* AI Summary Card */}
->>>>>>> Stashed changes
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-6 shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
                 <div className="flex items-center justify-between mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
                   <div className="flex items-center space-x-3"><div className="bg-white p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100"><Sparkles size={22} className="fill-indigo-50" /></div><h4 className="text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
                   <span className="flex items-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-md"><Brain size={14} className="mr-1.5"/> วิเคราะห์โดย AI</span>
                 </div>
-<<<<<<< Updated upstream
-                <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">นักศึกษามีความรับผิดชอบในเกณฑ์ <span className="font-extrabold text-emerald-600 bg-white px-3 py-1 rounded-lg shadow-sm border border-emerald-100 mx-1">ดีเยี่ยม</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ 88%</p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-purple-600"/> แนวโน้มการเข้าเรียน</h4>
-                  <div className="flex items-end justify-between h-40 px-2 border-b border-slate-100 pb-2">
-                    {[85, 88, 92, 70, 89, 95].map((val, idx) => (
-                      <div key={idx} className="flex flex-col items-center w-1/6">
-                        <div className="w-full flex justify-center items-end h-32 relative"><div className="w-8 bg-slate-100 rounded-t-md absolute bottom-0 h-full"></div><div className={`w-8 rounded-t-md absolute bottom-0 transition-all ${idx === 3 ? 'bg-red-400' : 'bg-purple-500'}`} style={{height: `${val}%`}}></div></div>
-                        <span className={`text-xs mt-2 ${idx === 3 ? 'font-bold text-red-500' : 'text-slate-500'}`}>W{idx+1}</span>
-=======
                 <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">
                   นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-3 py-1 rounded-lg shadow-sm mx-1 ${termAvgPercent >= 80 ? 'text-emerald-600 bg-white border border-emerald-100' : 'text-yellow-600 bg-white border border-yellow-100'}`}>{termAvgPercent >= 80 ? 'ดีเยี่ยม' : termAvgPercent >= 60 ? 'ปานกลาง' : 'ควรปรับปรุง'}</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ {termAvgPercent}%
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm overflow-x-auto">
-                  <h4 className="font-bold text-slate-800 flex items-center mb-4 min-w-[300px]"><BarChart2 size={18} className="mr-2 text-purple-600"/> แนวโน้มการเข้าเรียนรายครั้ง</h4>
-                  <div className="flex items-end h-48 px-2 border-b border-slate-100 pb-2 min-w-[300px] gap-2 overflow-x-auto">
-                    {termTrendData.map((data, idx) => (
-                      <div key={idx} className="flex flex-col items-center flex-1 min-w-[40px]" title={`วันที่ ${data.date} (มาเรียน ${data.percent}%)`}>
-                        <div className="w-full flex justify-center items-end h-32 relative group">
-                          <div className="w-full max-w-[32px] bg-slate-100 rounded-t-md absolute bottom-0 h-full"></div>
-                          <div className={`w-full max-w-[32px] rounded-t-md absolute bottom-0 transition-all ${data.isLow ? 'bg-red-400 group-hover:bg-red-500' : 'bg-purple-500 group-hover:bg-purple-600'}`} style={{height: `${data.percent}%`}}></div>
-                          <span className="absolute -top-6 text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{data.percent}%</span>
-                        </div>
-                        <span className={`text-[10px] mt-2 truncate max-w-full ${data.isLow ? 'font-bold text-red-500' : 'text-slate-500'}`}>{data.label}</span>
->>>>>>> Stashed changes
-                      </div>
-                    ))}
-                  </div>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-5 border-b border-slate-200">
+                  <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Users className="text-purple-600" size={20}/> สถิติการเข้าเรียนรายบุคคล (ทั้งเทอม)</h4>
+                  <p className="text-sm text-slate-500 mt-0.5">สรุปข้อมูลจากตารางการเช็คชื่อทั้งหมด {termStudentStats[0]?.totalClasses || 0} ครั้ง</p>
                 </div>
-
-                <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังขาดเรียนสูงสุด</h4>
-                  <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2">
-                    {studentsAbsentStats.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-4">ไม่มีนักศึกษาที่ขาดเรียน</p>
-                    ) : (
-                      studentsAbsentStats.map(s => (
-                        <div key={s.id || s.studentUserId || s.studentId} className="flex justify-between items-center border-b border-slate-50 pb-2">
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{s.name}</p>
-                            <p className="text-xs text-slate-500">{s.studentId || s.id || '-'}</p>
-                          </div>
-                          <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded">ขาด {s.absentCount} ครั้ง</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 font-semibold w-16 text-center">#</th>
+                        <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
+                        <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
+                        <th className="py-3 px-4 font-semibold text-center text-green-600">ตรงเวลา</th>
+                        <th className="py-3 px-4 font-semibold text-center text-yellow-600">สาย</th>
+                        <th className="py-3 px-4 font-semibold text-center text-red-500">ขาดเรียน</th>
+                        <th className="py-3 px-4 font-semibold text-center">เข้าเรียน (%)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {termStudentStats.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" className="py-8 text-center text-slate-400">ยังไม่มีข้อมูลนักศึกษาในคลาสนี้</td>
+                        </tr>
+                      ) : termStudentStats.map((student, idx) => (
+                        <tr key={student.id || student.studentUserId || idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono text-xs">{student.studentId || '-'}</td>
+                          <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
+                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.presentCount}</td>
+                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.lateCount}</td>
+                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.absentCount}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${student.attendancePercent >= 80 ? 'bg-emerald-50 text-emerald-700' : student.attendancePercent >= 60 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
+                              {student.attendancePercent}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
               </>)}
@@ -1118,11 +1129,7 @@ export default function TeacherCourseDetail() {
               <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
               <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
-<<<<<<< Updated upstream
             <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 shadow-md">บันทึกเวลาเช็คชื่อ</button>
-=======
-            <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700">บันทึก</button>
->>>>>>> Stashed changes
           </div>
         </div>
       )}

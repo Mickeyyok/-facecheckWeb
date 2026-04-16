@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X, Calendar } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { attendanceService } from '../../services/attendanceService';
@@ -17,6 +17,9 @@ export default function StudentDashboard() {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   
+  // ✅ State สำหรับเก็บ ID วิชาที่ผู้ใช้เลือกคลิก (เพื่อเช็คชื่อ)
+  const [selectedCourseId, setSelectedCourseId] = useState(null);
+  
   // --- States สำหรับระบบ Check-in ---
   const videoRef = useRef();
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -25,7 +28,7 @@ export default function StudentDashboard() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 1. โหลดโมเดล AI และดึงข้อมูลคลาสเรียน (ทำครั้งเดียวตอนเปิดหน้า)
+  // 1. โหลดโมเดล AI และดึงข้อมูลคลาสเรียน
   useEffect(() => {
     const loadModels = async () => {
       const MODEL_URL = '/models';
@@ -46,6 +49,10 @@ export default function StudentDashboard() {
         try {
           const data = await classService.getClassesByStudent(user.id);
           setStudentClasses(data);
+          // ตั้งค่าเริ่มต้นให้เลือกวิชาแรกอัตโนมัติ ถ้ายังไม่ได้เลือกวิชาไหน
+          if (data.length > 0 && !selectedCourseId) {
+            setSelectedCourseId(data[0].id);
+          }
         } catch (err) {
           console.error('โหลดคลาสเรียนล้มเหลว', err);
         }
@@ -71,33 +78,76 @@ export default function StudentDashboard() {
     fetchAttendanceHistory();
   }, [user]);
 
-  // วิชาที่กำลังจะเรียน (ให้เป็นวิชาแรกในลิสต์)
-  const activeCourse = studentClasses.length > 0 ? studentClasses[0] : null;
+  // วิชาที่กำลังทำงานอยู่ (ดึงจากวิชาที่ผู้ใช้คลิกเลือก ไม่ใช่แค่วิชาแรกอีกต่อไป)
+  const activeCourse = studentClasses.find(c => c.id === selectedCourseId) || (studentClasses.length > 0 ? studentClasses[0] : null);
 
-  // คำนวณว่าหมดเวลาเช็คชื่อหรือยัง
+  // ✅ คำนวณเวลาสายและขาดเรียน (แก้ไขให้ยึด endTime เป็นหลัก)
+  const getCheckInTimeLimits = (course) => {
+    if (!course || !course.startTime) return null;
+    const [startH, startM] = course.startTime.split(':').map(Number);
+    const lateMin = course.lateThresholdMinutes || 15;
+    
+    const startDate = new Date();
+    startDate.setHours(startH, startM, 0, 0);
+    
+    // เวลาสาย = เวลาเริ่ม + นาทีที่ยอมให้สาย
+    const lateDate = new Date(startDate.getTime() + lateMin * 60000);
+    
+    // เวลาขาดเรียน = ใช้เวลาจบวิชา (endTime)
+    let absentDate = new Date(startDate.getTime() + (lateMin * 2) * 60000);
+    if (course.endTime) {
+      const [endH, endM] = course.endTime.split(':').map(Number);
+      absentDate = new Date();
+      absentDate.setHours(endH, endM, 0, 0);
+    }
+    
+    const formatTime = (d) => d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    
+    return {
+      start: formatTime(startDate),
+      late: formatTime(lateDate),
+      absent: formatTime(absentDate)
+    };
+  };
+
+  const timeLimits = getCheckInTimeLimits(activeCourse);
+
+  // ✅ คำนวณว่าหมดเวลาเช็คชื่อหรือยัง (แก้ไขให้ยึดตาม endTime)
   const isCheckInExpired = (() => {
     if (!activeCourse || !activeCourse.startTime) return false;
     const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // คำนวณเวลาปิดรับเช็คชื่อ = startTime + (lateThreshold * 2)
-    const [startH, startM] = activeCourse.startTime.split(':').map(Number);
-    const lateThreshold = activeCourse.lateThresholdMinutes || 15;
-    const absentDeadline = startH * 60 + startM + (lateThreshold * 2);
-
-    // ถ้ามี endTime ก็ใช้เป็นลิมิตด้วย
-    let endMinutes = 24 * 60;
+    let cutoffMinutes = 24 * 60;
+    // ถ้ามี endTime ให้ปิดระบบเช็คชื่อตามเวลา endTime เลย (เช่น 22:00)
     if (activeCourse.endTime) {
       const [endH, endM] = activeCourse.endTime.split(':').map(Number);
-      endMinutes = endH * 60 + endM;
+      cutoffMinutes = endH * 60 + endM;
+    } else {
+      const [startH, startM] = activeCourse.startTime.split(':').map(Number);
+      const lateThreshold = activeCourse.lateThresholdMinutes || 15;
+      cutoffMinutes = startH * 60 + startM + (lateThreshold * 2);
     }
 
-    // ปิดรับเช็คชื่อเมื่อเลย absent deadline หรือ endTime
-    const cutoff = Math.min(absentDeadline, endMinutes);
-    return nowMinutes > cutoff;
+    return nowMinutes > cutoffMinutes;
   })();
 
-  // 2. ฟังก์ชันขอพิกัด GPS
+  // ฟังก์ชันแปลวันในสัปดาห์ให้เป็นภาษาไทย
+  const getThaiDay = (dayStr) => {
+    if (!dayStr) return 'ไม่ระบุวัน';
+    const days = {
+      'MONDAY': 'วันจันทร์', 'MON': 'วันจันทร์',
+      'TUESDAY': 'วันอังคาร', 'TUE': 'วันอังคาร',
+      'WEDNESDAY': 'วันพุธ', 'WED': 'วันพุธ',
+      'THURSDAY': 'วันพฤหัสบดี', 'THU': 'วันพฤหัสบดี',
+      'FRIDAY': 'วันศุกร์', 'FRI': 'วันศุกร์',
+      'SATURDAY': 'วันเสาร์', 'SAT': 'วันเสาร์',
+      'SUNDAY': 'วันอาทิตย์', 'SUN': 'วันอาทิตย์'
+    };
+    return days[dayStr.toString().toUpperCase()] || dayStr;
+  };
+
+  // ฟังก์ชันขอพิกัด GPS
   const getLocation = () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -111,7 +161,7 @@ export default function StudentDashboard() {
     });
   };
 
-  // 3. ฟังก์ชันเปิด/ปิดกล้อง
+  // ฟังก์ชันเปิด/ปิดกล้อง
   const startVideo = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
@@ -129,10 +179,10 @@ export default function StudentDashboard() {
     }
   };
 
-  // 4. กระบวนการสแกนและส่งข้อมูลไป Backend
+  // กระบวนการสแกนและส่งข้อมูลไป Backend
   const processCheckIn = async () => {
     if (!activeCourse) {
-      alert('ไม่พบวิชาเรียนที่กำลังเปิดให้เช็คชื่อ');
+      alert('กรุณาเลือกวิชาที่ต้องการเช็คชื่อก่อน');
       return;
     }
 
@@ -143,7 +193,7 @@ export default function StudentDashboard() {
 
       setScanStep(1);
       await startVideo();
-      await new Promise(r => setTimeout(r, 1500)); // รอภาพกล้องชัด
+      await new Promise(r => setTimeout(r, 1500));
 
       let descriptor = null;
       for (let i = 0; i < 50; i++) {
@@ -165,16 +215,12 @@ export default function StudentDashboard() {
 
       stopVideo();
 
-      // ✅ 1. เพิ่มโค้ดดึงข้อมูล User จาก LocalStorage มาช่วยเผื่อ useAuth โหลดไม่ทัน
       const localUser = JSON.parse(localStorage.getItem('user') || '{}');
       const actualStudentId = user?.studentId || localUser?.studentId || "2310511101060";
 
-      console.log("กำลังส่งข้อมูลเช็คชื่อของรหัส:", actualStudentId); // เช็คใน Console (F12) ได้ว่าส่งถูกคนไหม
-
-      // ยิง API ไป Spring Boot (ใช้ข้อมูลจริง)
       const checkInData = {
         classId: activeCourse.id, 
-        studentId: actualStudentId, // ✅ 2. ใช้ตัวแปรที่ดึงรหัสมาอย่างถูกต้อง
+        studentId: actualStudentId, 
         latitude: lat,
         longitude: lng,
         faceDescriptor: Array.from(descriptor)
@@ -204,7 +250,6 @@ export default function StudentDashboard() {
     setShowCheckInModal(false);
   };
 
-  // คำนวณสถิติจาก attendance history จริง
   const computeStats = (items) => ({
     present: items.filter(h => h.status?.toUpperCase() === 'PRESENT').length,
     late: items.filter(h => h.status?.toUpperCase() === 'LATE').length,
@@ -218,19 +263,18 @@ export default function StudentDashboard() {
   return (
     <div className="p-8 lg:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-[1400px] mx-auto space-y-8">
       
-      {/* Header ภาพรวมการเรียน */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h3 className="text-[28px] font-extrabold text-slate-800 tracking-tight flex items-center flex-wrap gap-3">
           ภาพรวมการเรียน
           {activeCourse && (
-            <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg tracking-wide">
-              วิชา {activeCourse.subjectName}
+            <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg tracking-wide shadow-sm">
+              กำลังดู: วิชา {activeCourse.subjectName}
             </span>
           )}
         </h3>
       </div>
 
-      {/* แถบแจ้งเตือนเตรียมตัวสแกนหน้า (ซ่อนถ้าไม่มีวิชา) */}
       {activeCourse && showUpcomingAlert && (
         <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200/60 p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden pr-12">
           <div className="absolute left-0 top-0 w-1.5 h-full bg-amber-400"></div>
@@ -239,9 +283,9 @@ export default function StudentDashboard() {
               <Bell className="text-amber-600 animate-pulse" size={20} />
             </div>
             <div>
-              <p className="text-amber-900 font-bold text-base">แจ้งเตือนเตรียมตัวเข้าเรียน</p>
+              <p className="text-amber-900 font-bold text-base">วิชาที่คุณเลือก</p>
               <p className="text-sm text-amber-700/80 mt-0.5 font-medium">
-                ใกล้ถึงเวลาเรียนวิชา <span className="font-bold text-amber-800">{activeCourse.subjectName}</span>
+                เตรียมตัวเช็คชื่อในวิชา <span className="font-bold text-amber-800">{activeCourse.subjectName}</span>
               </p>
             </div>
           </div>
@@ -255,7 +299,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* สรุปการเข้าเรียน 3 กล่อง */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
           <div>
@@ -286,13 +330,10 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 2 Columns: เช็กชื่อ/AI (ซ้าย) | ตารางเรียน (ขวา) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* คอลัมน์ซ้าย */}
+        {/* คอลัมน์ซ้าย: กล่องเช็คชื่อ */}
         <div className="lg:col-span-2 space-y-8">
-          
-          {/* กล่องเช็กชื่อ */}
           <div className={`rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden flex flex-col justify-between min-h-[260px] transition-all duration-500 ${isClassCanceled ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-md' : 'bg-gradient-to-br from-[#2b4cdd] to-[#1e3ab8] shadow-[0_15px_40px_-10px_rgba(43,76,221,0.5)]'}`}>
             <div className="relative z-10 flex flex-col md:flex-row md:justify-between items-start">
               <div>
@@ -320,19 +361,53 @@ export default function StudentDashboard() {
                   )}
                 </div>
                 <h3 className={`text-3xl md:text-[40px] font-black tracking-tight mb-2 leading-tight ${isClassCanceled ? 'text-slate-300' : 'text-white'}`}>
-                  {activeCourse ? activeCourse.subjectName : 'ยังไม่มีวิชาเรียน'}
+                  {activeCourse ? activeCourse.subjectName : 'ยังไม่ได้เลือกวิชา'}
                 </h3>
-                <p className={`${isClassCanceled ? 'text-slate-400' : 'text-blue-200'} text-[15px] font-medium`}>
-                  {activeCourse ? `รหัสวิชา ${activeCourse.subjectCode}` : 'กรุณารออาจารย์เพิ่มรายชื่อลงในคลาส'}
+                <p className={`${isClassCanceled ? 'text-slate-400' : 'text-blue-200'} text-[15px] font-medium flex items-center gap-2 mt-2`}>
+                  {activeCourse ? (
+                    <>
+                      <span>รหัสวิชา {activeCourse.subjectCode}</span>
+                      <span className="w-1.5 h-1.5 bg-blue-300 rounded-full"></span>
+                      <span className="font-bold text-white">{getThaiDay(activeCourse.scheduleDay)}</span>
+                    </>
+                  ) : 'กรุณาเลือกวิชาจากตารางด้านขวา'}
                 </p>
               </div>
               
-              <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4 text-center min-w-[130px] mt-6 md:mt-0 self-start shadow-inner">
-                <p className={`text-[11px] font-extrabold uppercase tracking-widest mb-1.5 ${isClassCanceled ? 'text-slate-400' : 'text-blue-200'}`}>เวลาเรียน</p>
-                <p className={`text-xl font-black tracking-wide ${isClassCanceled ? 'text-slate-300 opacity-50 line-through' : 'text-white'}`}>
-                  {activeCourse && activeCourse.startTime ? activeCourse.startTime.substring(0, 5) : '00:00'} -<br/>
-                  {activeCourse && activeCourse.endTime ? activeCourse.endTime.substring(0, 5) : '00:00'}
-                </p>
+              <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-5 mt-6 md:mt-0 self-start shadow-inner w-full md:w-auto min-w-[220px]">
+                <div className="flex justify-between items-center border-b border-white/20 pb-3 mb-3">
+                  <p className={`text-xs font-extrabold uppercase tracking-widest ${isClassCanceled ? 'text-slate-400' : 'text-blue-200'}`}>เวลาเรียน</p>
+                  <p className={`text-lg font-black tracking-wide ${isClassCanceled ? 'text-slate-300 opacity-50 line-through' : 'text-white'}`}>
+                    {activeCourse && activeCourse.startTime ? activeCourse.startTime.substring(0, 5) : '00:00'} - {activeCourse && activeCourse.endTime ? activeCourse.endTime.substring(0, 5) : '00:00'}
+                  </p>
+                </div>
+                
+                {timeLimits && !isClassCanceled ? (
+                  <div className="space-y-2.5">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="flex items-center text-emerald-300 font-semibold">
+                        <CheckCircle size={14} className="mr-1.5" /> ตรงเวลา
+                      </span>
+                      <span className="text-emerald-50 font-bold bg-emerald-500/20 px-2 py-0.5 rounded text-xs">ถึง {timeLimits.late}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="flex items-center text-amber-300 font-semibold">
+                        <AlertTriangle size={14} className="mr-1.5" /> มาสาย
+                      </span>
+                      <span className="text-amber-50 font-bold bg-amber-500/20 px-2 py-0.5 rounded text-xs">ถึง {timeLimits.absent}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="flex items-center text-rose-300 font-semibold">
+                        <XCircle size={14} className="mr-1.5" /> ขาดเรียน
+                      </span>
+                      <span className="text-rose-50 font-bold bg-rose-500/20 px-2 py-0.5 rounded text-xs">หลัง {timeLimits.absent}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 font-medium text-center py-2">
+                    {isClassCanceled ? 'คลาสถูกยกเลิก' : 'ยังไม่มีเวลาเรียนกำหนด'}
+                  </p>
+                )}
               </div>
             </div>
             
@@ -358,7 +433,7 @@ export default function StudentDashboard() {
                 </div>
               ) : activeCourse ? (
                 <button onClick={handleCheckIn} className="bg-white text-[#2b4cdd] px-8 py-4 rounded-xl font-extrabold text-[16px] hover:bg-blue-50 shadow-xl flex items-center justify-center space-x-2.5 transform transition-all hover:-translate-y-1 hover:shadow-2xl active:scale-95 w-full sm:w-auto">
-                  <Camera size={20} strokeWidth={2.5} /><span>เช็กชื่อเข้าเรียน</span>
+                  <Camera size={20} strokeWidth={2.5} /><span>คลิกเพื่อเช็กชื่อ</span>
                 </button>
               ) : (
                 <button disabled className="bg-white/20 text-white/50 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 cursor-not-allowed w-full sm:w-auto">
@@ -369,7 +444,7 @@ export default function StudentDashboard() {
             <div className={`absolute top-0 right-0 w-[400px] h-[400px] rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none ${isClassCanceled ? 'bg-slate-500 opacity-10' : 'bg-white opacity-[0.03]'}`}></div>
           </div>
 
-          {/* AI Suggestion Card */}
+          {/* AI Suggestion */}
           <div className="bg-[#131B2F] rounded-[2rem] shadow-xl p-8 text-white relative overflow-hidden group flex flex-col sm:flex-row items-center gap-6">
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 opacity-10 rounded-full blur-3xl pointer-events-none group-hover:opacity-20 transition-opacity duration-500"></div>
             <div className="w-16 h-16 shrink-0 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 backdrop-blur-md z-10">
@@ -378,59 +453,83 @@ export default function StudentDashboard() {
             <div className="text-center sm:text-left z-10">
               <h4 className="font-extrabold mb-2 text-xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AI Suggestion</h4>
               <p className="text-[15px] text-slate-300 leading-relaxed font-medium">
-                "หมั่นเข้าเรียนให้ตรงเวลานะครับ การเช็คชื่อผ่านระบบ FaceCheck จะช่วยบันทึกสถิติที่แม่นยำให้กับคุณ!"
+                "คลิกเลือกวิชาที่คุณกำลังจะเรียนจากตารางด้านขวามือ เพื่อเปลี่ยนวิชาที่ต้องการเช็คชื่อได้เลยครับ!"
               </p>
             </div>
           </div>
 
         </div>
 
-        {/* คอลัมน์ขวา: ตารางเรียน (ข้อมูลจริงจาก Database) */}
+        {/* ✅ คอลัมน์ขวา: ตารางเรียนที่คลิกเลือกได้ */}
         <div className="lg:col-span-1 space-y-8 flex flex-col">
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200/60 p-7 flex-1">
-            <div className="flex items-center mb-6">
-              <div className="w-1.5 h-6 bg-[#2b4cdd] rounded-full mr-3"></div>
-              <h4 className="font-extrabold text-lg text-slate-800">ตารางเรียนของคุณ</h4>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <div className="w-1.5 h-6 bg-[#2b4cdd] rounded-full mr-3"></div>
+                <h4 className="font-extrabold text-lg text-slate-800">เลือกวิชาที่จะเช็คชื่อ</h4>
+              </div>
+              <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">คลิกเพื่อเลือก</span>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
               {studentClasses.length === 0 ? (
                 <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="text-slate-500 font-medium">ยังไม่มีวิชาเรียนที่ลงทะเบียน</p>
                   <p className="text-sm text-slate-400 mt-1">รออาจารย์เพิ่มชื่อเข้าคลาส</p>
                 </div>
               ) : (
-                studentClasses.map((course, idx) => (
-                  <div key={course.id} className={`p-5 rounded-2xl border transition-all ${idx === 0 ? 'bg-blue-50/60 border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
-                    <div className="flex justify-between items-start mb-2.5">
-                      <h5 className={`font-bold text-[16px] ${idx === 0 ? 'text-blue-900' : 'text-slate-700'}`}>
-                        {course.subjectCode} {course.subjectName}
-                      </h5>
+                studentClasses.map((course) => {
+                  const isSelected = activeCourse && activeCourse.id === course.id;
+                  
+                  return (
+                    <div 
+                      key={course.id} 
+                      onClick={() => setSelectedCourseId(course.id)} // กดแล้วเปลี่ยน activeCourse
+                      className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+                        isSelected 
+                          ? 'bg-blue-50/60 border-[#2b4cdd] ring-1 ring-[#2b4cdd]/30 shadow-md transform scale-[1.02]' 
+                          : 'bg-slate-50 border-slate-100 hover:border-blue-300 hover:bg-white hover:shadow-sm'
+                      }`}
+                    >
+                      {isSelected && <div className="absolute left-0 top-0 w-1 h-full bg-[#2b4cdd]"></div>}
+                      
+                      <div className="flex justify-between items-start mb-3">
+                        <h5 className={`font-bold text-[16px] pr-4 ${isSelected ? 'text-[#2b4cdd]' : 'text-slate-700'}`}>
+                          {course.subjectCode} {course.subjectName}
+                        </h5>
+                      </div>
+                      
+                      <div className="flex flex-col gap-2 text-[13px] text-slate-500 font-medium">
+                        {/* แสดง วันที่เรียน */}
+                        <div className="flex items-center">
+                          <div className={`flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${isSelected ? 'bg-[#2b4cdd]/10 text-[#2b4cdd]' : 'bg-slate-200/60 text-slate-600'}`}>
+                            <Calendar size={13} className="mr-1.5"/>
+                            {getThaiDay(course.scheduleDay)}
+                          </div>
+                        </div>
+                        
+                        {/* แสดง เวลาและห้อง */}
+                        <span className="flex items-center ml-1">
+                          <Clock size={14} className="mr-2 text-slate-400"/> 
+                          {course.startTime ? course.startTime.substring(0,5) : '-'} - {course.endTime ? course.endTime.substring(0,5) : '-'} <span className="mx-2">•</span> ห้อง {course.room || '-'}
+                        </span>
+                      </div>
+                      
+                      {isSelected && (
+                        <div className="mt-4 flex items-center justify-center bg-[#2b4cdd] text-white text-[12px] font-extrabold px-3 py-1.5 rounded-lg shadow-sm">
+                          <CheckCircle size={14} className="mr-1.5"/> กำลังเลือกวิชานี้
+                        </div>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-1.5 text-[13px] text-slate-500 font-medium mb-3">
-                      <span className="flex items-center">
-                        <Clock size={14} className="mr-2 text-slate-400"/> 
-                        {course.startTime ? course.startTime.substring(0,5) : '-'} - {course.endTime ? course.endTime.substring(0,5) : '-'} • ห้อง {course.room || '-'}
-                      </span>
-                    </div>
-                    {idx === 0 && (
-                      <span className="inline-block bg-white border border-blue-200 text-[#2b4cdd] text-[11px] font-extrabold px-3 py-1 rounded-full shadow-sm">
-                        วิชาถัดไป
-                      </span>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
-            
-            <button className="w-full mt-6 py-3 text-sm text-slate-500 font-bold border border-slate-200 bg-white rounded-xl hover:bg-slate-50 hover:text-slate-700 transition-colors">
-              ดูตารางทั้งหมด
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Modal Check-in พร้อมการทำงานจริง */}
+      {/* Modal Check-in (ไม่เปลี่ยนโครงสร้างเดิม) */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative">

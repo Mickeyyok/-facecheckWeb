@@ -23,5 +23,11 @@ export const notificationService = {
   deleteNotification: async (notificationId) => {
     const response = await api.delete(`/notifications/${notificationId}`);
     return response.data;
+  },
+
+  // ✅ เพิ่มใหม่: ส่งแจ้งเตือน AI ไปให้นักศึกษา
+  sendAiAlert: async (studentUserId, message) => {
+    const response = await api.post('/notifications/ai-alert', { studentUserId, message });
+    return response.data;
   }
 };

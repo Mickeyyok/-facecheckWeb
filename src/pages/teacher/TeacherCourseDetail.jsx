@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
+import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../context/AuthContext';
 
-// Component ป้ายสถานะ
 const StatusBadge = ({ status }) => {
   if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">✅ ตรงเวลา</span>;
   if (status === 'late') return <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">⚠️ สาย</span>;
@@ -22,9 +22,6 @@ export default function TeacherCourseDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // ==========================================
-  // 1. ประกาศตัวแปร State ทั้งหมดไว้บนสุด (ป้องกันจอขาว)
-  // ==========================================
   const [courseSubTab, setCourseSubTab] = useState('info');
   const [loadingCourse, setLoadingCourse] = useState(true);
 
@@ -60,9 +57,9 @@ export default function TeacherCourseDetail() {
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [dailyFilter, setDailyFilter] = useState('all');
 
-  const [riskAlerts, setRiskAlerts] = useState([
-    { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' }
-  ]);
+  const [termStats, setTermStats] = useState([]);
+  const [loadingTerm, setLoadingTerm] = useState(false);
+  const [riskAlerts, setRiskAlerts] = useState([]);
 
   const [isClassCanceled, setIsClassCanceled] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -86,11 +83,19 @@ export default function TeacherCourseDetail() {
   const [showSendAlertModal, setShowSendAlertModal] = useState(false);
   const [alertToSend, setAlertToSend] = useState(null);
   const [alertToDelete, setAlertToDelete] = useState(null);
+  const [aiMessage, setAiMessage] = useState("");
 
+  const formatThaiDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const isDatePast = (dateStr) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return new Date(dateStr) < today;
+  };
+  const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
 
-  // ==========================================
-  // 2. ดึงข้อมูล (useEffect)
-  // ==========================================
   useEffect(() => {
     const fetchCourse = async () => {
       try {
@@ -131,20 +136,11 @@ export default function TeacherCourseDetail() {
           setEditLocationForm(newLoc);
         }
 
-        if (data.scheduledDatesJson) {
+        // ✅ โค้ดที่ถูกต้อง
+        if (data.scheduledDates) { // ลบคำว่า Json ออก
           try {
-            setScheduledDates(JSON.parse(data.scheduledDatesJson));
+            setScheduledDates(JSON.parse(data.scheduledDates)); // ลบคำว่า Json ออก
           } catch(e) {}
-        }
-        
-        // โหลด scheduledDates ที่เซฟไว้จาก backend
-        if (data.scheduledDates) {
-          try {
-            const parsedDates = JSON.parse(data.scheduledDates);
-            setScheduledDates(parsedDates);
-          } catch(err) {
-            console.error('Error parsing scheduled dates:', err);
-          }
         }
       } catch (error) {
         console.error('ดึงข้อมูลคลาสไม่สำเร็จ:', error);
@@ -182,98 +178,78 @@ export default function TeacherCourseDetail() {
     }
   }, [courseSubTab, selectedDate, courseId]);
 
-  // --- States สำหรับสถิติรายเทอม ---
-  const [termAttendance, setTermAttendance] = useState([]);
-  const [loadingTerm, setLoadingTerm] = useState(false);
-
   useEffect(() => {
-    if (courseSubTab === 'term' && courseId) {
-      const fetchTermAttendance = async () => {
-        try {
-          setLoadingTerm(true);
-          const data = await attendanceService.getAttendanceByClass(courseId);
-          setTermAttendance(data);
-        } catch (error) {
-          console.error('ดึงข้อมูลรายเทอมไม่สำเร็จ:', error);
-          setTermAttendance([]);
-        } finally {
-          setLoadingTerm(false);
-        }
-      };
-      fetchTermAttendance();
+    if ((courseSubTab === 'term' || courseSubTab === 'alerts') && courseId) {
+      fetchTermStats();
     }
-  }, [courseSubTab, courseId]);
+  }, [courseSubTab, courseId, scheduledDates.length, studentList.length]);
 
-  let termTrendData = [];
-  let termAvgPercent = 0;
-  let termStudentStats = [];
+  const fetchTermStats = async () => {
+    if (studentList.length === 0) return;
+    try {
+      setLoadingTerm(true);
+      const data = await attendanceService.getAttendanceByClass(courseId);
+      const pastDatesCount = scheduledDates.filter(d => isDatePast(d.date) || isDateToday(d.date)).length;
 
-  if (courseSubTab === 'term') {
-    const datesSet = new Set();
-    termAttendance.forEach(a => {
-      if (a.checkedAt) datesSet.add(a.checkedAt.split('T')[0]);
-    });
-    const dates = Array.from(datesSet).sort();
-    const totalStudents = studentList.length || 1;
-
-    termStudentStats = studentList.map(s => {
-      let presentCount = 0;
-      let lateCount = 0;
-      let absentCount = dates.length; // Default to absent, subtract if record found
-
-      dates.forEach(d => {
-        const record = termAttendance.find(a => 
-          (a.studentId === s.studentUserId || a.studentId === s.id || a.userId === s.studentUserId) && 
-          a.checkedAt && a.checkedAt.startsWith(d)
+      const stats = studentList.map(student => {
+        const studentRecords = data.filter(a => 
+          a.studentId === student.studentId || 
+          a.userId === student.studentUserId || 
+          a.userId === student.id
         );
-        if (record) {
-          const st = record.status?.toUpperCase();
-          if (st === 'PRESENT') {
-            presentCount++;
-            absentCount--;
-          } else if (st === 'LATE') {
-            lateCount++;
-            absentCount--;
-          } else if (st === 'ABSENT') {
-            // Remains absent
-          }
-        }
+
+        const presentCount = studentRecords.filter(r => ['PRESENT', 'ON_TIME'].includes(r.status?.toUpperCase())).length;
+        const lateCount = studentRecords.filter(r => r.status?.toUpperCase() === 'LATE').length;
+        const recordedAbsent = studentRecords.filter(r => r.status?.toUpperCase() === 'ABSENT').length;
+        
+        const missingCount = Math.max(0, pastDatesCount - (presentCount + lateCount + recordedAbsent));
+        const totalAbsent = recordedAbsent + missingCount;
+        
+        const attendancePercent = pastDatesCount > 0 ? Math.round(((presentCount + lateCount) / pastDatesCount) * 100) : 100;
+        const absentPercent = pastDatesCount > 0 ? Math.round((totalAbsent / pastDatesCount) * 100) : 0;
+
+        const isRisk = pastDatesCount > 0 && (absentPercent >= 20 || totalAbsent >= 3);
+
+        return {
+          ...student,
+          presentCount,
+          lateCount,
+          absentCount: totalAbsent,
+          attendancePercent,
+          absentPercent,
+          isRisk
+        };
       });
+
+      setTermStats(stats);
       
-      const totalClasses = dates.length;
-      const attendedClasses = presentCount + lateCount;
-      const attendancePercent = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0;
+      const alerts = stats
+        .filter(s => s.isRisk)
+        .map((s, index) => ({
+          id: index + 1,
+          studentUserId: s.studentUserId || s.id,
+          studentId: s.studentId,
+          studentName: s.name,
+          issue: s.absentPercent >= 20 ? `ขาดเรียนสะสมถึง ${s.absentPercent}%` : `ขาดเรียนสะสม ${s.absentCount} ครั้ง`,
+          status: 'pending'
+        }));
+        
+      setRiskAlerts(alerts);
+    } catch (error) {
+      console.error("Error fetching term stats", error);
+    } finally {
+      setLoadingTerm(false);
+    }
+  };
 
-      return { 
-        ...s, 
-        presentCount, 
-        lateCount, 
-        absentCount, 
-        totalClasses,
-        attendancePercent
-      };
-    });
+  const avgAttendance = termStats.length > 0 
+      ? Math.round(termStats.reduce((sum, s) => sum + s.attendancePercent, 0) / termStats.length) 
+      : 100;
+  let termGrade = 'ดีเยี่ยม';
+  let termColor = 'text-emerald-600 bg-emerald-50 border-emerald-200';
+  if (avgAttendance < 80) { termGrade = 'ปานกลาง'; termColor = 'text-yellow-600 bg-yellow-50 border-yellow-200'; }
+  if (avgAttendance < 60) { termGrade = 'วิกฤต (ต้องปรับปรุง)'; termColor = 'text-red-600 bg-red-50 border-red-200'; }
 
-    let sumPercent = 0;
-    termTrendData = dates.map((d, index) => {
-      let presentLateCount = 0;
-      termAttendance.forEach(a => {
-        if (a.checkedAt && a.checkedAt.startsWith(d)) {
-          const st = a.status?.toUpperCase();
-          if (st === 'PRESENT' || st === 'LATE') presentLateCount++;
-        }
-      });
-      const percent = Math.round((presentLateCount / totalStudents) * 100);
-      sumPercent += percent;
-      return { label: `W${index + 1}`, date: d, percent, isLow: percent < 80 };
-    });
-
-    termAvgPercent = dates.length > 0 ? Math.round(sumPercent / dates.length) : 0;
-  }
-
-  // ==========================================
-  // 3. คำนวณสถิติและจัดกลุ่ม
-  // ==========================================
   const scheduledDateList = scheduledDates.map(d => d.date).sort();
   const selectedDateIndex = scheduledDateList.indexOf(selectedDate);
   const hasPrevDate = selectedDateIndex > 0;
@@ -281,20 +257,17 @@ export default function TeacherCourseDetail() {
   const goPrevDate = () => { if (hasPrevDate) setSelectedDate(scheduledDateList[selectedDateIndex - 1]); };
   const goNextDate = () => { if (hasNextDate) setSelectedDate(scheduledDateList[selectedDateIndex + 1]); };
 
-  // ✅ 1. แก้ไขให้ระบบจับคู่นักศึกษาได้ถูกต้อง 100%
   const dailyStudentRows = studentList.map(s => {
-    // ค้นหาข้อมูลเช็คชื่อของนักศึกษาคนนี้แบบครอบคลุม
     const record = dailyAttendance.find(a => 
-      a.userId === s.studentUserId ||        // กรณีเทียบ UUID
-      a.studentId === s.studentId ||         // กรณีเทียบรหัส 13 หลัก
-      a.studentCode === s.studentId ||       // กรณี Backend ส่งชื่อคีย์เป็น studentCode
-      a.studentId === s.studentUserId        // กรณี Backend ส่ง UUID มาในช่อง studentId
+      a.userId === s.studentUserId || 
+      a.studentId === s.studentId || 
+      a.studentCode === s.studentId || 
+      a.studentId === s.studentUserId
     );
 
     let currentStatus = record?.status?.toLowerCase() || null;
-    if (currentStatus === 'on_time') currentStatus = 'present'; // จัดการคำให้ตรงกัน
+    if (currentStatus === 'on_time') currentStatus = 'present';
 
-    // ถ้ายังไม่เช็คชื่อ ให้ตรวจสอบว่า "เลยเวลาขาดเรียนหรือยัง"
     if (!currentStatus && courseTimeSettings.absent) {
         const [absentH, absentM] = courseTimeSettings.absent.split(':').map(Number);
         const now = new Date();
@@ -306,15 +279,10 @@ export default function TeacherCourseDetail() {
         }
     }
 
-    // จัดการการแสดงเวลาให้สวยงาม
     let displayTime = '-';
     if (record) {
-      if (record.time) {
-        displayTime = record.time + ' น.';
-      } else if (record.checkedAt) {
-        const d = new Date(record.checkedAt);
-        displayTime = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
-      }
+      if (record.time) displayTime = record.time + ' น.';
+      else if (record.checkedAt) displayTime = new Date(record.checkedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
     }
 
     return {
@@ -324,7 +292,6 @@ export default function TeacherCourseDetail() {
     };
   });
 
-  // ✅ 2. คำนวณสถิติ
   const dailyStats = {
     total: studentList.length,
     present: dailyStudentRows.filter(s => ['present', 'on_time'].includes(s.attendanceStatus)).length,
@@ -333,7 +300,6 @@ export default function TeacherCourseDetail() {
     pending: dailyStudentRows.filter(s => !s.attendanceStatus).length,
   };
 
-  
   const checkedCount = dailyStats.present + dailyStats.late + dailyStats.absent;
   const checkedPercent = dailyStats.total > 0 ? Math.round((checkedCount / dailyStats.total) * 100) : 0;
 
@@ -345,10 +311,20 @@ export default function TeacherCourseDetail() {
     return true;
   });
 
+  const exportDailyCSV = () => {
+    const statusLabel = (s) => ['present', 'on_time'].includes(s) ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : 'รอดำเนินการ';
+    const header = 'ลำดับ,รหัสนักศึกษา,ชื่อ-สกุล,เวลาเช็คชื่อ,สถานะ';
+    const rows = filteredDailyRows.map((r, i) => `${i + 1},${r.studentId || '-'},${r.name},${r.checkedTime},${statusLabel(r.attendanceStatus)}`);
+    const csvContent = '\uFEFF' + [header, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `attendance_${courseInfo.code}_${selectedDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  // ==========================================
-  // 4. ฟังก์ชันทำงานต่างๆ (Handlers)
-  // ==========================================
   const handleAddStudent = async () => {
     if (!addStudentId.trim()) return alert('กรุณากรอกรหัสนักศึกษา');
     try {
@@ -371,20 +347,34 @@ export default function TeacherCourseDetail() {
     } catch (error) { alert('ลบนักศึกษาไม่สำเร็จ'); }
   };
 
-  const exportDailyCSV = () => {
-    const statusLabel = (s) => ['present', 'on_time'].includes(s) ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : 'รอดำเนินการ';
-    const header = 'ลำดับ,รหัสนักศึกษา,ชื่อ-สกุล,เวลาเช็คชื่อ,สถานะ';
-    const rows = filteredDailyRows.map((r, i) => `${i + 1},${r.studentId || '-'},${r.name},${r.checkedTime},${statusLabel(r.attendanceStatus)}`);
-    const csvContent = '\uFEFF' + [header, ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `attendance_${courseInfo.code}_${selectedDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleSaveTimeSettings = async () => {
+    try {
+      const [startH, startM] = editTimeForm.start.split(':').map(Number);
+      const [lateH, lateM] = editTimeForm.late.split(':').map(Number);
+      const startTotalMinutes = (startH * 60) + startM;
+      const lateTotalMinutes = (lateH * 60) + lateM;
+      const lateThreshold = lateTotalMinutes - startTotalMinutes;
 
+      if (lateThreshold <= 0) return alert("เวลา 'สาย' ต้องมากกว่าเวลา 'เริ่มคลาส' ครับ");
+
+      const payload = {
+        subjectName: courseInfo.name,
+        subjectCode: courseInfo.code,
+        instructorName: courseInfo.instructor,
+        room: courseInfo.room,
+        term: courseInfo.term,
+        startTime: editTimeForm.start,
+        lateThresholdMinutes: lateThreshold
+      };
+
+      await classService.updateClass(courseId, payload);
+      setCourseTimeSettings(editTimeForm);
+      setShowSetTimeModal(false);
+      alert("บันทึกเวลาเรียบร้อยแล้ว!");
+    } catch (error) {
+      alert("บันทึกเวลาไม่สำเร็จ: " + (error.response?.data?.message || error.message));
+    }
+  };
 
   const handleSetLocation = () => {
     if (!navigator.geolocation) return alert("เบราว์เซอร์ของคุณไม่รองรับการดึงพิกัด GPS");
@@ -464,58 +454,37 @@ export default function TeacherCourseDetail() {
     }
   };
 
-  const handleSaveTimeSettings = async () => {
+  const openAlertModal = (alert) => {
+    setAlertToSend(alert);
+    setAiMessage(`เรียน ${alert.studentName},\n\nระบบ FaceCheck ตรวจพบว่าคุณมีสถิติ${alert.issue} ซึ่งอาจส่งผลต่อการประเมินผลการเรียน\n\nโปรดติดต่ออาจารย์ผู้สอนด่วนเพื่อชี้แจงเหตุผล\n\nด้วยความเคารพ\nผู้สอนวิชา ${courseInfo.name}`);
+    setShowSendAlertModal(true);
+  };
+
+  const handleSendAlertToStudent = async () => {
+    if (!alertToSend || !aiMessage.trim()) return;
+    
     try {
-      const [sh, sm] = editTimeForm.start.split(':').map(Number);
-      const [lh, lm] = editTimeForm.late.split(':').map(Number);
-      const startMin = sh * 60 + sm;
-      const lateMin = lh * 60 + lm;
-      const threshold = lateMin - startMin > 0 ? lateMin - startMin : 15;
-
-      const payload = {
-        startTime: editTimeForm.start,
-        endTime: editTimeForm.absent,
-        lateThresholdMinutes: threshold
-      };
-
-      await classService.updateClass(courseId, payload);
-      setCourseTimeSettings(editTimeForm);
-      setShowSetTimeModal(false);
-    } catch(err) {
-      alert('บันทึกไม่สำเร็จ: ' + (err.response?.data?.message || err.message));
+      await notificationService.sendAiAlert(alertToSend.studentUserId, aiMessage);
+      
+      setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
+      setShowSendAlertModal(false);
+      setAlertToSend(null);
+      alert('ส่งการแจ้งเตือนเข้าระบบของนักศึกษาเรียบร้อยแล้ว');
+    } catch (error) {
+      alert('ไม่สามารถส่งแจ้งเตือนได้: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleSendAlertToStudent = () => {
-    setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
-    setShowSendAlertModal(false);
-    setAlertToSend(null);
-    alert('ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว');
-  };
-
-  const formatThaiDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-  };
-  const isDatePast = (dateStr) => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    return new Date(dateStr) < today;
-  };
-  const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
-
-  const saveScheduledDatesToBackend = async (newDates) => {
+  // ✅ โค้ดที่ถูกต้อง
+  const saveDatesToDB = async (datesArray) => {
     try {
-      await classService.updateClass(courseId, { scheduledDates: JSON.stringify(newDates) });
-      setScheduledDates(newDates);
-    } catch(err) {
-      console.error('Save dates error:', err);
-      alert('บันทึกวันเช็คชื่อลงฐานข้อมูลไม่สำเร็จ');
-      setScheduledDates(newDates); // fallback local
-    }
+      await classService.updateClass(courseId, {
+        ...courseInfo,
+        scheduledDates: JSON.stringify(datesArray) // ลบคำว่า Json ออก
+      });
+    } catch (err) {}
   };
 
-  // สร้างวันที่อัตโนมัติจากรูปแบบ (เลือกวัน + ช่วงเทอม)
   const handleGenerateDates = () => {
     const { selectedDays, startDate, endDate } = generateForm;
     if (selectedDays.length === 0) return alert('กรุณาเลือกวันในสัปดาห์อย่างน้อย 1 วัน');
@@ -533,12 +502,13 @@ export default function TeacherCourseDetail() {
     }
     if (generated.length === 0) return alert('ไม่พบวันที่ตรงกับเงื่อนไข');
 
-    // merge กับวันที่มีอยู่แล้ว (ไม่ซ้ำ)
-    const existingDates = new Set(scheduledDates.map(d => d.date));
-    const newDates = generated.filter(d => !existingDates.has(d.date));
-    const finalDates = [...scheduledDates, ...newDates].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    saveScheduledDatesToBackend(finalDates);
+    setScheduledDates(prev => {
+      const existingDates = new Set(prev.map(d => d.date));
+      const newDates = generated.filter(d => !existingDates.has(d.date));
+      const finalDates = [...prev, ...newDates].sort((a, b) => new Date(a.date) - new Date(b.date));
+      saveDatesToDB(finalDates);
+      return finalDates;
+    });
     setShowGenerateModal(false);
     alert(`เพิ่ม ${generated.length} วันเรียบร้อย ข้อมูลถูกบันทึกแล้ว!`);
   };
@@ -547,31 +517,33 @@ export default function TeacherCourseDetail() {
   
   const handleAddScheduledDate = () => {
     if (!newDateForm.date) return alert('กรุณาเลือกวันที่');
-    if (scheduledDates.some(d => d.date === newDateForm.date)) {
-      return alert('วันที่นี้ถูกกำหนดไว้แล้ว');
-    }
-    const finalDates = [...scheduledDates, { id: Date.now(), date: newDateForm.date, note: newDateForm.note, auto: false }]
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (scheduledDates.some(d => d.date === newDateForm.date)) return alert('วันที่นี้ถูกกำหนดไว้แล้ว');
     
-    saveScheduledDatesToBackend(finalDates);
+    setScheduledDates(prev => {
+      const finalDates = [...prev, { id: Date.now(), date: newDateForm.date, note: newDateForm.note, auto: false }].sort((a, b) => new Date(a.date) - new Date(b.date));
+      saveDatesToDB(finalDates);
+      return finalDates;
+    });
     setNewDateForm({ date: '', note: '' });
     setShowAddDateModal(false);
   };
 
-  const handleRemoveScheduledDate = (dateId) => {
-    const finalDates = scheduledDates.filter(d => d.id !== dateId);
-    saveScheduledDatesToBackend(finalDates);
-    setDateToDelete(null);
+  const handleRemoveScheduledDate = (dateId) => { 
+    setScheduledDates(prev => {
+      const finalDates = prev.filter(d => d.id !== dateId);
+      saveDatesToDB(finalDates);
+      return finalDates;
+    });
+    setDateToDelete(null); 
   };
+  
   const handleClearAllDates = () => { 
     if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
-      saveScheduledDatesToBackend([]);
-    }
+      setScheduledDates([]);
+      saveDatesToDB([]);
+    } 
   };
 
-  // ==========================================
-  // 5. ส่วนแสดงผล (UI)
-  // ==========================================
   return (
     <div className="p-8 lg:p-10 animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[70vh]">
@@ -618,8 +590,6 @@ export default function TeacherCourseDetail() {
           {/* TAB 1: ข้อมูลวิชา */}
           {courseSubTab === 'info' && (
             <div className="space-y-8 animate-in fade-in duration-300">
-              
-              {/* ข้อมูลเบื้องต้น */}
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-purple-600"/> ข้อมูลวิชาเบื้องต้น</h4>
@@ -675,7 +645,6 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* กำหนดเวลาและวันที่เช็คชื่อ */}
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600"/> กำหนดเวลาและวันที่เช็คชื่อ</h4>
@@ -688,7 +657,6 @@ export default function TeacherCourseDetail() {
                   <div className="border border-red-200 bg-red-50 p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-sm block mb-1">ขาดเรียน (หลังจากเวลา)</span><span className="text-2xl font-bold text-red-800">{courseTimeSettings.absent} น.</span></div>
                 </div>
 
-                {/* วันที่มีเช็คชื่อ */}
                 <div className="border-t border-slate-100 pt-5">
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5">
@@ -769,7 +737,6 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* ตั้งค่าพิกัด */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-blue-600"/> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
@@ -794,7 +761,6 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* ยกคลาสเรียน */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-lg font-bold text-slate-800 flex items-center"><AlertTriangle className="mr-2 text-rose-500"/> จัดการสถานะคลาสเรียน</h4>
@@ -860,40 +826,14 @@ export default function TeacherCourseDetail() {
           {/* TAB 3: สถิติรายวัน */}
           {courseSubTab === 'daily' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              {scheduledDates.length === 0 ? (<>
-                {/* แจ้งเตือนว่ายังไม่มีตาราง แต่ยังแสดงข้อมูลวันนี้ได้ */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <Calendar size={20} className="text-amber-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-amber-800">ยังไม่ได้กำหนดตารางวันเช็คชื่อ</p>
-                    <p className="text-xs text-amber-600 mt-0.5">ไปที่ Tab "ข้อมูลวิชา" เพื่อสร้างตารางอัตโนมัติ — แต่ยังสามารถดูสถิติรายวันได้จากด้านล่าง</p>
-                  </div>
-                  <button onClick={() => setCourseSubTab('info')} className="text-xs bg-amber-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-amber-700 transition shrink-0">ไปกำหนดตาราง</button>
+              {scheduledDates.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <Calendar size={40} className="mx-auto text-slate-300 mb-4" />
+                  <p className="font-bold text-slate-600 text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
+                  <p className="text-slate-500 text-sm mt-2">ไปที่ Tab <span className="font-bold text-purple-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
+                  <button onClick={() => setCourseSubTab('info')} className="mt-5 bg-purple-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
                 </div>
-
-                {/* แสดง date picker แบบ manual + ปุ่มดึงข้อมูล */}
-                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                        รายงานสถิติประจำวัน
-                        {selectedDate === todayStr && (
-                          <span className="flex items-center gap-1.5 text-xs bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-full"><span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> LIVE</span>
-                        )}
-                      </h4>
-                      <p className="text-sm text-slate-500 mt-0.5">{selectedDate === todayStr ? 'กำลังแสดงผลวันนี้' : `วันที่ ${formatThaiDate(selectedDate)}`}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                      <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-xl px-4 py-2 shadow-sm">
-                        <Calendar size={16} className="text-indigo-500" />
-                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer" />
-                      </div>
-                      <button onClick={() => fetchDailyAttendance(selectedDate)} className="text-sm bg-white text-slate-600 border border-slate-300 font-bold px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center"><RefreshCw size={14} className="mr-1.5"/> รีเฟรช</button>
-                      <button onClick={exportDailyCSV} className="text-sm bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center"><Download size={14} className="mr-1.5"/> ส่งออก CSV</button>
-                    </div>
-                  </div>
-                </div>
-              </>) : (<>
+              ) : (<>
               <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                   <div>
@@ -1015,74 +955,76 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
-              {loadingTerm ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
-                  <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-4"></div>
-                  <p className="text-slate-500 font-medium">กำลังโหลดข้อมูลสถิติรายเทอม...</p>
-                </div>
-              ) : termTrendData.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
-                  <BarChart2 size={48} className="mx-auto text-slate-300 mb-4" />
-                  <p className="text-slate-500 font-medium">ยังไม่มีข้อมูลการเช็คชื่อในระบบสำหรับเทอมนี้</p>
-                </div>
-              ) : (<>
-              {/* AI Summary Card */}
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-6 shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
                 <div className="flex items-center justify-between mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
                   <div className="flex items-center space-x-3"><div className="bg-white p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100"><Sparkles size={22} className="fill-indigo-50" /></div><h4 className="text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
                   <span className="flex items-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-md"><Brain size={14} className="mr-1.5"/> วิเคราะห์โดย AI</span>
                 </div>
-                <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">
-                  นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-3 py-1 rounded-lg shadow-sm mx-1 ${termAvgPercent >= 80 ? 'text-emerald-600 bg-white border border-emerald-100' : 'text-yellow-600 bg-white border border-yellow-100'}`}>{termAvgPercent >= 80 ? 'ดีเยี่ยม' : termAvgPercent >= 60 ? 'ปานกลาง' : 'ควรปรับปรุง'}</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ {termAvgPercent}%
-                </p>
+                {loadingTerm ? (
+                  <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังวิเคราะห์ข้อมูลการเข้าเรียน...</p>
+                ) : (
+                  <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">
+                    นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-3 py-1 rounded-lg shadow-sm border mx-1 ${termColor}`}>{termGrade}</span> ค่าเฉลี่ยการเข้าเรียนตลอดเทอมอยู่ที่ {avgAttendance}%
+                  </p>
+                )}
               </div>
 
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-slate-200">
-                  <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Users className="text-purple-600" size={20}/> สถิติการเข้าเรียนรายบุคคล (ทั้งเทอม)</h4>
-                  <p className="text-sm text-slate-500 mt-0.5">สรุปข้อมูลจากตารางการเช็คชื่อทั้งหมด {termStudentStats[0]?.totalClasses || 0} ครั้ง</p>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="py-3 px-4 font-semibold w-16 text-center">#</th>
-                        <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
-                        <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
-                        <th className="py-3 px-4 font-semibold text-center text-green-600">ตรงเวลา</th>
-                        <th className="py-3 px-4 font-semibold text-center text-yellow-600">สาย</th>
-                        <th className="py-3 px-4 font-semibold text-center text-red-500">ขาดเรียน</th>
-                        <th className="py-3 px-4 font-semibold text-center">เข้าเรียน (%)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {termStudentStats.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" className="py-8 text-center text-slate-400">ยังไม่มีข้อมูลนักศึกษาในคลาสนี้</td>
-                        </tr>
-                      ) : termStudentStats.map((student, idx) => (
-                        <tr key={student.id || student.studentUserId || idx} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
-                          <td className="py-3 px-4 text-slate-600 font-mono text-xs">{student.studentId || '-'}</td>
-                          <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
-                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.presentCount}</td>
-                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.lateCount}</td>
-                          <td className="py-3 px-4 text-center font-bold text-slate-600">{student.absentCount}</td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${student.attendancePercent >= 80 ? 'bg-emerald-50 text-emerald-700' : student.attendancePercent >= 60 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
-                              {student.attendancePercent}%
-                            </span>
-                          </td>
-                        </tr>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-purple-600"/> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
+                  {loadingTerm ? (
+                    <p className="text-sm text-slate-500 mt-4">กำลังโหลดข้อมูล...</p>
+                  ) : (
+                    <div className="space-y-4 mt-4">
+                      {termStats.filter(s => s.absentCount > 0).sort((a,b)=>b.absentCount-a.absentCount).slice(0, 5).map((s, idx) => (
+                        <div key={s.id} className="flex justify-between items-center border-b border-slate-50 pb-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-slate-400 font-bold w-4">{idx + 1}.</span>
+                            <div>
+                                <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                                <p className="text-xs text-slate-500">{s.studentId}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                             <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded block mb-1">ขาดเรียนสะสม {s.absentCount} ครั้ง</span>
+                             <span className="text-slate-500 text-[10px]">อัตราเข้าเรียน {s.attendancePercent}%</span>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                      {termStats.filter(s => s.absentCount > 0).length === 0 && (
+                        <div className="text-center py-6">
+                          <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2"/>
+                          <p className="text-slate-600 font-bold">ไม่มีนักศึกษาที่ขาดเรียนเลย 🎉</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังกลุ่มเสี่ยง (AI Alert)</h4>
+                  <div className="space-y-4">
+                    {loadingTerm ? (
+                      <p className="text-sm text-slate-500 mt-4">กำลังวิเคราะห์ความเสี่ยง...</p>
+                    ) : riskAlerts.length === 0 ? (
+                      <div className="text-center py-6 text-emerald-500 font-bold bg-emerald-50 rounded-lg">
+                        <CheckCircle size={24} className="mx-auto mb-2"/> ไม่มีกลุ่มเสี่ยง
+                      </div>
+                    ) : (
+                      riskAlerts.slice(0, 4).map(alert => (
+                        <div key={alert.id} className="flex justify-between items-start border-b border-slate-50 pb-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{alert.studentName}</p>
+                            <p className="text-[11px] text-red-500 mt-0.5">{alert.issue}</p>
+                          </div>
+                          <button onClick={() => setCourseSubTab('alerts')} className="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-200 transition whitespace-nowrap ml-2">จัดการ</button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-              </>)}
             </div>
           )}
 
@@ -1091,22 +1033,43 @@ export default function TeacherCourseDetail() {
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-4">
                 <h4 className="text-xl font-bold text-slate-800 flex items-center"><Brain className="mr-2 text-purple-600" size={24} /> AI วิเคราะห์ความเสี่ยง</h4>
+                <p className="text-sm text-slate-500 hidden md:block">แจ้งเตือนอัตโนมัติเมื่อนักศึกษาขาดเรียนเกิน 20% หรือ 3 ครั้งขึ้นไป</p>
               </div>
-              {riskAlerts.length === 0 ? (
-                <div className="bg-white p-8 rounded-xl border border-slate-200 text-center shadow-sm"><CheckCircle size={32} className="mx-auto text-green-400 mb-3" /><p className="font-bold text-slate-800">ไม่มีการแจ้งเตือนความเสี่ยง</p></div>
+              {loadingTerm ? (
+                 <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
+                   <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-4"></div>
+                   <p className="text-purple-600 font-bold">AI กำลังวิเคราะห์และตรวจสอบเงื่อนไขความเสี่ยง...</p>
+                 </div>
+              ) : riskAlerts.length === 0 ? (
+                <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
+                  <CheckCircle size={40} className="mx-auto text-emerald-400 mb-4" />
+                  <p className="font-bold text-slate-800 text-lg">ไม่มีนักศึกษาในกลุ่มเสี่ยงหมดสิทธิ์สอบ</p>
+                  <p className="text-sm text-slate-500 mt-2">นักศึกษาทุกคนมีความรับผิดชอบในการเข้าเรียนอยู่ในเกณฑ์ที่น่าพอใจ</p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {riskAlerts.map(alert => (
                     <div key={alert.id} className="bg-red-50 p-5 rounded-xl border border-red-100 shadow-sm relative group transition-all hover:shadow-md">
-                      <div className="flex items-start mb-4"><div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div><div><h5 className="font-bold text-red-800 mb-1">แจ้งเตือนความเสี่ยงสูง</h5><p className="text-sm text-red-700">พบนักศึกษาเสี่ยงหมดสิทธิ์สอบ 1 ราย <span className="font-bold">{alert.studentName}</span> {alert.issue}</p></div></div>
-                      <div className="flex items-center">
+                      <div className="flex items-start mb-4">
+                        <div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div>
+                        <div>
+                          <h5 className="font-bold text-red-800 mb-1">ความเสี่ยงหมดสิทธิ์สอบ</h5>
+                          <p className="text-sm text-red-700">
+                            <span className="font-bold text-base block my-1">{alert.studentName}</span> 
+                            {alert.issue}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center mt-4">
                         {alert.status === 'pending' ? (
-                          <button onClick={() => { setAlertToSend(alert); setShowSendAlertModal(true); }} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center"><Sparkles size={14} className="mr-1.5 text-amber-500" /> ร่างอีเมลแจ้งเตือน</button>
+                          <button onClick={() => openAlertModal(alert)} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center w-full justify-center"><Sparkles size={14} className="mr-1.5 text-amber-500" /> ร่างข้อความแจ้งเตือนเข้าแอป</button>
                         ) : (
-                          <span className="text-sm bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center"><CheckCircle size={16} className="mr-1.5"/> ส่งสำเร็จ</span>
+                          <span className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg font-bold flex items-center w-full justify-center"><CheckCircle size={16} className="mr-1.5"/> ส่งแจ้งเตือนเข้าระบบสำเร็จแล้ว</span>
                         )}
                       </div>
-                      <div className="absolute top-4 right-4"><button onClick={() => setAlertToDelete(alert)} className="text-red-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-100 rounded-lg"><Trash2 size={18} /></button></div>
+                      <div className="absolute top-4 right-4">
+                        <button onClick={() => setAlertToDelete(alert)} className="text-red-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-100 rounded-lg" title="ลบการแจ้งเตือน"><Trash2 size={18} /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1116,9 +1079,7 @@ export default function TeacherCourseDetail() {
         </div>
       </div>
 
-      {/* --- Modals ส่วนของอาจารย์ --- */}
-
-      {/* Modal Set Time */}
+      {/* --- Modals --- */}
       {showSetTimeModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
@@ -1134,7 +1095,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal Set Location */}
       {showSetLocationModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
@@ -1163,25 +1123,27 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal Send AI Alert */}
       {showSendAlertModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
             <button onClick={() => setShowSendAlertModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24}/></button>
-            <div className="flex items-center space-x-2 mb-4 text-purple-700"><Brain size={24} /><h3 className="text-xl font-bold">ร่างข้อความโดย AI</h3></div>
+            <div className="flex items-center space-x-2 mb-4 text-purple-700"><Brain size={24} /><h3 className="text-xl font-bold">ส่งแจ้งเตือนเข้าระบบนักศึกษา</h3></div>
             <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
               <div className="mb-2 text-sm"><span className="font-bold">ถึง:</span> {alertToSend?.studentName}</div>
-              <textarea className="w-full h-32 bg-white border border-slate-200 p-2 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-purple-500" defaultValue={`เรียน ${alertToSend?.studentName},\n\nพบว่าคุณมีสถิติ${alertToSend?.issue} โปรดติดต่ออาจารย์ผู้สอนด่วน\n\nFaceCheck`}></textarea>
+              <textarea 
+                className="w-full h-32 bg-white border border-slate-200 p-2 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-purple-500" 
+                value={aiMessage}
+                onChange={(e) => setAiMessage(e.target.value)}
+              ></textarea>
             </div>
             <div className="flex space-x-3">
               <button onClick={() => setShowSendAlertModal(false)} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-50">ยกเลิก</button>
-              <button onClick={handleSendAlertToStudent} className="flex-1 bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700"><Mail size={16} className="inline mr-2"/> ส่งการแจ้งเตือน</button>
+              <button onClick={handleSendAlertToStudent} className="flex-1 bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700"><Mail size={16} className="inline mr-2"/> ยืนยันการส่ง</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Confirm ยกคลาสเรียน */}
       {showCancelClassConfirm && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
@@ -1196,7 +1158,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal เพิ่มนักศึกษา */}
       {showAddStudentModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
@@ -1214,7 +1175,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal ยืนยันลบนักศึกษา */}
       {studentToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
@@ -1230,7 +1190,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal สร้างตารางอัตโนมัติ */}
       {showGenerateModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
@@ -1257,7 +1216,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal เพิ่มวันเดี่ยว */}
       {showAddDateModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
@@ -1276,7 +1234,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal ยืนยันลบวันที่เช็คชื่อ */}
       {dateToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">

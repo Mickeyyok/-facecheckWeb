@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock, 
   Target, AlertTriangle, Search, Plus, Trash2, Calendar, BarChart2, 
-  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft 
+  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft,
+  Upload, FileUp, CheckCircle2, AlertCircle, Loader2
 } from 'lucide-react';
 import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
@@ -84,6 +85,14 @@ export default function TeacherCourseDetail() {
   const [alertToSend, setAlertToSend] = useState(null);
   const [alertToDelete, setAlertToDelete] = useState(null);
   const [aiMessage, setAiMessage] = useState("");
+
+  // CSV Import states
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvPreview, setCsvPreview] = useState([]);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvImportProgress, setCsvImportProgress] = useState(0);
+  const [csvImportResult, setCsvImportResult] = useState(null);
 
   const formatThaiDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -336,6 +345,109 @@ export default function TeacherCourseDetail() {
     } catch (error) {
       alert(error.response?.data?.message || 'เพิ่มนักศึกษาไม่สำเร็จ');
     } finally { setAddingStudent(false); }
+  };
+
+  // ==========================================
+  // CSV Import handlers
+  // ==========================================
+  const parseCsvText = (rawText) => {
+    // Strip BOM, null bytes, และ non-printable characters
+    const text = rawText
+      .replace(/^\uFEFF/, '')
+      .replace(/\u0000/g, '')
+      .replace(/[^\x20-\x7E\r\n,]/g, ''); // เก็บเฉพาะ printable ASCII + newline + comma
+
+    console.log('📄 CSV raw length:', rawText.length);
+    console.log('📄 CSV cleaned text:', JSON.stringify(text.substring(0, 200)));
+
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    console.log('📄 Lines found:', lines.length, lines);
+
+    const studentIds = [];
+    for (const line of lines) {
+      // ดึงตัวเลขทั้งหมดในบรรทัด
+      const matches = line.match(/\d{10,13}/g);
+      if (matches) {
+        studentIds.push(matches[0]);
+      }
+    }
+
+    const unique = [...new Set(studentIds)];
+    console.log('✅ Student IDs found:', unique);
+    return unique;
+  };
+
+  const handleCsvFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvFile(file);
+    setCsvImportResult(null);
+
+    console.log('📁 File:', file.name, 'Size:', file.size, 'Type:', file.type);
+
+    // ลองอ่านด้วย file.text() ก่อน (modern API)
+    if (file.text) {
+      file.text().then(rawText => {
+        console.log('📄 Read via file.text() OK');
+        const ids = parseCsvText(rawText);
+        setCsvPreview(ids);
+      }).catch(err => {
+        console.error('❌ file.text() failed, fallback to FileReader', err);
+        readWithFileReader(file);
+      });
+    } else {
+      readWithFileReader(file);
+    }
+  };
+
+  const readWithFileReader = (file) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      console.log('📄 Read via FileReader OK');
+      const ids = parseCsvText(event.target.result);
+      setCsvPreview(ids);
+    };
+    reader.onerror = (err) => {
+      console.error('❌ FileReader error:', err);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvImport = async () => {
+    if (csvPreview.length === 0) return alert('ไม่พบรหัสนักศึกษาในไฟล์ CSV');
+
+    setCsvImporting(true);
+    setCsvImportProgress(0);
+    const results = { success: 0, failed: 0, duplicates: 0, errors: [] };
+
+    for (let i = 0; i < csvPreview.length; i++) {
+      const studentId = csvPreview[i];
+      try {
+        await classService.addStudentToClass(courseId, studentId);
+        results.success++;
+      } catch (error) {
+        const msg = error.response?.data?.message || 'ไม่สำเร็จ';
+        if (error.response?.status === 409) {
+          results.duplicates++;
+        } else {
+          results.failed++;
+        }
+        results.errors.push({ id: studentId, message: msg });
+      }
+      setCsvImportProgress(Math.round(((i + 1) / csvPreview.length) * 100));
+    }
+
+    setCsvImportResult(results);
+    setCsvImporting(false);
+    await fetchStudents();
+  };
+
+  const resetCsvModal = () => {
+    setShowCsvModal(false);
+    setCsvFile(null);
+    setCsvPreview([]);
+    setCsvImportResult(null);
+    setCsvImportProgress(0);
   };
 
   const handleDeleteStudent = async () => {
@@ -788,8 +900,9 @@ export default function TeacherCourseDetail() {
             <div className="animate-in fade-in duration-300">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
                 <div><h4 className="font-bold text-slate-800 text-base sm:text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-xs sm:text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
-                <div className="flex w-full sm:w-auto">
-                  <button onClick={() => { setAddStudentId(''); setShowAddStudentModal(true); }} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0 w-full sm:w-auto">+ เพิ่มรายชื่อ</button>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <button onClick={() => { setAddStudentId(''); setShowAddStudentModal(true); }} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Plus size={15}/> เพิ่มรายชื่อ</button>
+                  <button onClick={() => { resetCsvModal(); setShowCsvModal(true); }} className="text-sm bg-emerald-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Upload size={15}/> นำเข้า CSV</button>
                 </div>
               </div>
               
@@ -1175,6 +1288,137 @@ export default function TeacherCourseDetail() {
             <button onClick={handleAddStudent} disabled={addingStudent || !addStudentId.trim()} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
               {addingStudent ? 'กำลังเพิ่ม...' : 'ยืนยันเพิ่มนักศึกษา'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {showCsvModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-xl relative animate-in zoom-in-95">
+            <button onClick={resetCsvModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 sm:p-6">
+              <h3 className="text-lg font-bold text-white flex items-center"><FileUp size={22} className="mr-2"/> นำเข้ารายชื่อจากไฟล์ CSV</h3>
+              <p className="text-emerald-100 text-sm mt-1">อัปโหลดไฟล์ CSV ที่มีรหัสนักศึกษา ระบบจะเพิ่มเข้าคลาสให้อัตโนมัติ</p>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              {/* File Upload Area */}
+              {!csvImportResult && (
+                <>
+                  <label className="block cursor-pointer mb-5">
+                    <div className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all ${csvFile ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                      {csvFile ? (
+                        <div>
+                          <CheckCircle2 size={36} className="mx-auto text-emerald-500 mb-2" />
+                          <p className="font-bold text-emerald-700 text-sm">{csvFile.name}</p>
+                          <p className="text-emerald-600 text-xs mt-1">พบรหัสนักศึกษา {csvPreview.length} รายการ</p>
+                          <p className="text-slate-400 text-xs mt-2">คลิกเพื่อเลือกไฟล์ใหม่</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <Upload size={36} className="mx-auto text-slate-300 mb-3" />
+                          <p className="font-bold text-slate-600 text-sm">คลิกเพื่อเลือกไฟล์ CSV</p>
+                          <p className="text-slate-400 text-xs mt-1.5">หรือลากไฟล์มาวางที่นี่</p>
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" accept=".csv,.txt" onChange={handleCsvFileChange} className="hidden" />
+                  </label>
+
+                  {/* Format Guide */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5">
+                    <p className="text-xs font-bold text-slate-700 mb-2 flex items-center"><FileText size={14} className="mr-1.5 text-slate-500"/> รูปแบบไฟล์ที่รองรับ</p>
+                    <div className="bg-white rounded-lg p-3 border border-slate-100 font-mono text-xs text-slate-600 space-y-0.5">
+                      <p className="text-slate-400"># ตัวอย่าง CSV (1 คอลัมน์)</p>
+                      <p>2310511010001</p>
+                      <p>2310511010002</p>
+                      <p className="text-slate-400 mt-2"># หรือหลายคอลัมน์ (ระบบจะดึงรหัสอัตโนมัติ)</p>
+                      <p>2310511010001, สมชาย ใจดี</p>
+                      <p>2310511010002, สมหญิง รักเรียน</p>
+                    </div>
+                  </div>
+
+                  {/* Preview List */}
+                  {csvPreview.length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-xs font-bold text-slate-700 mb-2">ตัวอย่างรหัสที่จะนำเข้า (แสดง {Math.min(csvPreview.length, 5)} จาก {csvPreview.length} รายการ)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {csvPreview.slice(0, 5).map((id, i) => (
+                          <span key={i} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-mono px-2.5 py-1 rounded-lg">{id}</span>
+                        ))}
+                        {csvPreview.length > 5 && <span className="bg-slate-100 text-slate-500 text-xs px-2.5 py-1 rounded-lg font-medium">+{csvPreview.length - 5} รายการ</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progress Bar */}
+                  {csvImporting && (
+                    <div className="mb-5">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-sm font-bold text-slate-700 flex items-center"><Loader2 size={14} className="mr-1.5 animate-spin"/> กำลังนำเข้า...</p>
+                        <p className="text-sm font-bold text-emerald-600">{csvImportProgress}%</p>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300" style={{ width: `${csvImportProgress}%` }}></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button onClick={resetCsvModal} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
+                    <button 
+                      onClick={handleCsvImport} 
+                      disabled={csvPreview.length === 0 || csvImporting} 
+                      className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {csvImporting ? <><Loader2 size={16} className="animate-spin"/> กำลังนำเข้า...</> : <><Upload size={16}/> นำเข้า {csvPreview.length > 0 ? `(${csvPreview.length} คน)` : ''}</>}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Import Results */}
+              {csvImportResult && (
+                <div>
+                  <div className="text-center mb-5">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 ${csvImportResult.failed > 0 ? 'bg-yellow-50' : 'bg-emerald-50'}`}>
+                      {csvImportResult.failed > 0 ? <AlertCircle size={32} className="text-yellow-500" /> : <CheckCircle2 size={32} className="text-emerald-500" />}
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-800">นำเข้าเสร็จสิ้น!</h4>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">{csvImportResult.success}</p>
+                      <p className="text-xs font-bold text-emerald-600 mt-1">สำเร็จ</p>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-yellow-700">{csvImportResult.duplicates}</p>
+                      <p className="text-xs font-bold text-yellow-600 mt-1">ซ้ำ</p>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-red-600">{csvImportResult.failed}</p>
+                      <p className="text-xs font-bold text-red-500 mt-1">ไม่สำเร็จ</p>
+                    </div>
+                  </div>
+
+                  {csvImportResult.errors.length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 max-h-32 overflow-y-auto">
+                      <p className="text-xs font-bold text-slate-600 mb-2">รายละเอียด:</p>
+                      {csvImportResult.errors.map((err, i) => (
+                        <p key={i} className="text-xs text-slate-500 py-0.5"><span className="font-mono text-slate-700">{err.id}</span> — {err.message}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  <button onClick={resetCsvModal} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md">เสร็จสิ้น</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

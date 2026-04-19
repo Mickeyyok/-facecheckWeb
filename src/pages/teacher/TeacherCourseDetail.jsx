@@ -119,16 +119,22 @@ export default function TeacherCourseDetail() {
           instructor: data.instructorName || user?.fullName || user?.name || ''
         }));
 
+        // ✅ คำนวณเวลาใหม่ ให้แสดงผลได้ตรงกัน
         if (data.startTime) {
-          const start = data.startTime.substring(0, 5);
-          const lateMin = data.lateThresholdMinutes || 15;
-          const absentMin = lateMin * 2;
-          
+          const start = data.startTime.substring(0, 5); // 09:00
           const [h, m] = start.split(':').map(Number);
+          
+          const lateMin = data.lateThresholdMinutes || 15;
           const lateTotal = h * 60 + m + lateMin;
-          const absentTotal = h * 60 + m + absentMin;
           const lateFmt = `${String(Math.floor(lateTotal / 60)).padStart(2, '0')}:${String(lateTotal % 60).padStart(2, '0')}`;
-          const absentFmt = `${String(Math.floor(absentTotal / 60)).padStart(2, '0')}:${String(absentTotal % 60).padStart(2, '0')}`;
+          
+          let absentFmt = "00:00";
+          if (data.endTime) {
+            absentFmt = data.endTime.substring(0, 5);
+          } else {
+             const absentTotal = h * 60 + m + (lateMin * 2);
+             absentFmt = `${String(Math.floor(absentTotal / 60)).padStart(2, '0')}:${String(absentTotal % 60).padStart(2, '0')}`;
+          }
           
           setCourseTimeSettings({ start, late: lateFmt, absent: absentFmt });
           setEditTimeForm({ start, late: lateFmt, absent: absentFmt });
@@ -145,10 +151,9 @@ export default function TeacherCourseDetail() {
           setEditLocationForm(newLoc);
         }
 
-        // ✅ โค้ดที่ถูกต้อง
-        if (data.scheduledDates) { // ลบคำว่า Json ออก
+        if (data.scheduledDates) {
           try {
-            setScheduledDates(JSON.parse(data.scheduledDates)); // ลบคำว่า Json ออก
+            setScheduledDates(JSON.parse(data.scheduledDates)); 
           } catch(e) {}
         }
       } catch (error) {
@@ -351,21 +356,14 @@ export default function TeacherCourseDetail() {
   // CSV Import handlers
   // ==========================================
   const parseCsvText = (rawText) => {
-    // Strip BOM, null bytes, และ non-printable characters
     const text = rawText
       .replace(/^\uFEFF/, '')
       .replace(/\u0000/g, '')
-      .replace(/[^\x20-\x7E\r\n,]/g, ''); // เก็บเฉพาะ printable ASCII + newline + comma
-
-    console.log('📄 CSV raw length:', rawText.length);
-    console.log('📄 CSV cleaned text:', JSON.stringify(text.substring(0, 200)));
+      .replace(/[^\x20-\x7E\r\n,]/g, ''); 
 
     const lines = text.split(/\r?\n/).filter(line => line.trim());
-    console.log('📄 Lines found:', lines.length, lines);
-
     const studentIds = [];
     for (const line of lines) {
-      // ดึงตัวเลขทั้งหมดในบรรทัด
       const matches = line.match(/\d{10,13}/g);
       if (matches) {
         studentIds.push(matches[0]);
@@ -373,7 +371,6 @@ export default function TeacherCourseDetail() {
     }
 
     const unique = [...new Set(studentIds)];
-    console.log('✅ Student IDs found:', unique);
     return unique;
   };
 
@@ -383,16 +380,11 @@ export default function TeacherCourseDetail() {
     setCsvFile(file);
     setCsvImportResult(null);
 
-    console.log('📁 File:', file.name, 'Size:', file.size, 'Type:', file.type);
-
-    // ลองอ่านด้วย file.text() ก่อน (modern API)
     if (file.text) {
       file.text().then(rawText => {
-        console.log('📄 Read via file.text() OK');
         const ids = parseCsvText(rawText);
         setCsvPreview(ids);
       }).catch(err => {
-        console.error('❌ file.text() failed, fallback to FileReader', err);
         readWithFileReader(file);
       });
     } else {
@@ -403,12 +395,8 @@ export default function TeacherCourseDetail() {
   const readWithFileReader = (file) => {
     const reader = new FileReader();
     reader.onload = (event) => {
-      console.log('📄 Read via FileReader OK');
       const ids = parseCsvText(event.target.result);
       setCsvPreview(ids);
-    };
-    reader.onerror = (err) => {
-      console.error('❌ FileReader error:', err);
     };
     reader.readAsText(file);
   };
@@ -459,6 +447,7 @@ export default function TeacherCourseDetail() {
     } catch (error) { alert('ลบนักศึกษาไม่สำเร็จ'); }
   };
 
+  // ✅ แก้ไขให้ส่งค่า lateThresholdMinutes และ endTime กลับไปให้ Spring Boot 
   const handleSaveTimeSettings = async () => {
     try {
       const [startH, startM] = editTimeForm.start.split(':').map(Number);
@@ -476,6 +465,7 @@ export default function TeacherCourseDetail() {
         room: courseInfo.room,
         term: courseInfo.term,
         startTime: editTimeForm.start,
+        endTime: editTimeForm.absent, // เพิ่มบรรทัดนี้ ให้มันส่งค่า absent ไปบันทึกเป็น endTime ใน Database
         lateThresholdMinutes: lateThreshold
       };
 
@@ -587,12 +577,11 @@ export default function TeacherCourseDetail() {
     }
   };
 
-  // ✅ โค้ดที่ถูกต้อง
   const saveDatesToDB = async (datesArray) => {
     try {
       await classService.updateClass(courseId, {
         ...courseInfo,
-        scheduledDates: JSON.stringify(datesArray) // ลบคำว่า Json ออก
+        scheduledDates: JSON.stringify(datesArray)
       });
     } catch (err) {}
   };
@@ -1203,9 +1192,9 @@ export default function TeacherCourseDetail() {
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Clock className="mr-2 text-purple-600" size={20}/> กำหนดเวลา</h3>
             <div className="space-y-3 mb-6">
-              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({...editTimeForm, start: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
-              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
-              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({...editTimeForm, start: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน (หลังจากเวลา / เลิกคลาส)</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
             <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 shadow-md">บันทึกเวลาเช็คชื่อ</button>
           </div>

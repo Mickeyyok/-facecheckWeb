@@ -10,6 +10,23 @@ import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
 import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../context/AuthContext';
+import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix Leaflet default marker icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+function ChangeMapView({ center }) {
+  const map = useMap();
+  useEffect(() => { map.setView(center); }, [center, map]);
+  return null;
+}
 
 const StatusBadge = ({ status }) => {
   if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">✅ ตรงเวลา</span>;
@@ -874,14 +891,25 @@ export default function TeacherCourseDetail() {
                   <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center"><Target size={14} className="mr-1.5"/> ตั้งค่าพิกัด</button>
                 </div>
                 <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 sm:gap-6 items-center shadow-sm">
-                   <div className="w-full md:w-1/3 bg-slate-200 h-24 sm:h-32 rounded-xl flex items-center justify-center relative overflow-hidden shadow-inner border border-slate-300">
-                      <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-300"></div>
-                      <div className="relative flex items-center justify-center">
-                        <div className="absolute w-12 sm:w-16 h-12 sm:h-16 bg-blue-500/20 rounded-full animate-ping"></div>
-                        <div className="absolute w-6 sm:w-8 h-6 sm:h-8 bg-blue-500/40 rounded-full"></div>
-                        <MapPin size={20} className="sm:hidden text-blue-600 relative z-10 fill-white" />
-                        <MapPin size={24} className="hidden sm:block text-blue-600 relative z-10 fill-white" />
-                      </div>
+                   <div className="w-full md:w-1/3 h-48 sm:h-56 rounded-xl overflow-hidden shadow-inner border border-slate-300 relative z-0">
+                      <MapContainer
+                        center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]}
+                        zoom={17}
+                        scrollWheelZoom={false}
+                        dragging={false}
+                        zoomControl={false}
+                        attributionControl={false}
+                        style={{ height: '100%', width: '100%' }}
+                      >
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        <ChangeMapView center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]} />
+                        <Marker position={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]} />
+                        <Circle
+                          center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]}
+                          radius={locationSettings.radius || 50}
+                          pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15 }}
+                        />
+                      </MapContainer>
                    </div>
                    <div className="w-full md:w-2/3 space-y-3 sm:space-y-4">
                       <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span><p className="font-bold text-slate-800 text-base sm:text-lg mt-0.5">{locationSettings.name}</p></div>

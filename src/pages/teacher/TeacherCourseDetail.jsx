@@ -1656,4 +1656,4 @@ export default function TeacherCourseDetail() {
 
     </div>
   );
-}
+} 

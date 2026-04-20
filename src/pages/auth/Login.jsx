@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, User, Users, CheckCircle, X } from 'lucide-react';
+import { Camera, User, Users, CheckCircle, X, Eye, EyeOff } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
@@ -17,6 +17,8 @@ export default function Login() {
   const [fullName, setFullName] = useState(''); 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Face Registration States
   const [showFaceRegModal, setShowFaceRegModal] = useState(false);
@@ -230,14 +232,46 @@ export default function Login() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-600 ml-1">รหัสผ่าน</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)} 
+                    placeholder="••••••••" 
+                    required 
+                    className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1a237e] transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
               {authMode === 'register' && (
                 <>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-600 ml-1">ยืนยันรหัสผ่าน</label>
-                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" required className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" />
+                    <div className="relative">
+                      <input 
+                        type={showConfirmPassword ? "text" : "password"} 
+                        value={confirmPassword} 
+                        onChange={e => setConfirmPassword(e.target.value)} 
+                        placeholder="••••••••" 
+                        required 
+                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1a237e] transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
                   </div>
                   {authRole === 'student' && (
                     <div className="pt-2">

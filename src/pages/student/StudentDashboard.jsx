@@ -22,6 +22,33 @@ export default function StudentDashboard() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // --- นาฬิกา real-time อัพเดตทุก 10 วินาที ---
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // --- คำนวณ deadline สแกนของแต่ละวิชา ---
+  const getCourseDeadline = (course) => {
+    if (!course?.startTime) return null;
+    const start = course.startTime.substring(0, 5);
+    const [h, m] = start.split(':').map(Number);
+    if (course.endTime) {
+      const end = course.endTime.substring(0, 5);
+      const [eH, eM] = end.split(':').map(Number);
+      const deadline = new Date();
+      deadline.setHours(eH, eM, 0, 0);
+      return deadline;
+    }
+    const lateMin = course.lateThresholdMinutes || 15;
+    const absentMin = lateMin * 2;
+    const absentTotalMin = h * 60 + m + absentMin;
+    const deadline = new Date();
+    deadline.setHours(Math.floor(absentTotalMin / 60), absentTotalMin % 60, 0, 0);
+    return deadline;
+  };
+
   // 1. โหลดโมเดลและรายชื่อวิชา
   useEffect(() => {
     const loadModels = async () => {
@@ -42,7 +69,14 @@ export default function StudentDashboard() {
           const data = await classService.getClassesByStudent(user.id);
           setStudentClasses(data);
           if (data.length > 0 && !selectedCourseId) {
-            setSelectedCourseId(data[0].id);
+            // เลือกวิชาแรกที่ยังไม่หมดเวลาสแกน (sort ตาม startTime)
+            const sorted = [...data].sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
+            const nowDate = new Date();
+            const firstActive = sorted.find(c => {
+              const dl = getCourseDeadline(c);
+              return !dl || nowDate <= dl;
+            });
+            setSelectedCourseId(firstActive ? firstActive.id : sorted[0].id);
           }
         } catch (err) { console.error('โหลดคลาสเรียนล้มเหลว', err); }
       }
@@ -305,16 +339,27 @@ export default function StudentDashboard() {
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200/60 p-7 flex-1">
             <h4 className="font-extrabold text-lg mb-6 flex items-center"><div className="w-1.5 h-6 bg-[#2b4cdd] rounded-full mr-3"></div>วิชาที่ลงทะเบียน</h4>
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {studentClasses.map((course) => (
-                <div key={course.id} onClick={() => setSelectedCourseId(course.id)} className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${selectedCourseId === course.id ? 'bg-blue-50/60 border-[#2b4cdd] ring-1 ring-[#2b4cdd]/30 shadow-md transform scale-[1.02]' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
-                  {selectedCourseId === course.id && <div className="absolute left-0 top-0 w-1 h-full bg-[#2b4cdd]"></div>}
-                  <h5 className={`font-bold text-[16px] mb-3 ${selectedCourseId === course.id ? 'text-[#2b4cdd]' : 'text-slate-700'}`}>{course.subjectCode} {course.subjectName}</h5>
-                  <div className="flex flex-col gap-2 text-[13px] text-slate-500 font-medium">
-                    <div className="flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-200/60 text-slate-600 w-fit"><Calendar size={13} className="mr-1.5"/>{getThaiDay(course.scheduleDay)}</div>
-                    <span className="flex items-center ml-1"><Clock size={14} className="mr-2 text-slate-400"/> {course.startTime?.substring(0,5)} - {course.endTime?.substring(0,5)}</span>
+              {[...studentClasses].sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00')).map((course) => {
+                const deadline = getCourseDeadline(course);
+                const isExpired = deadline && now > deadline;
+                const isActive = course.id === selectedCourseId;
+                const isOpenScan = !isExpired && deadline && now >= (() => { const s = new Date(); const [hh, mm] = (course.startTime || '00:00').split(':').map(Number); s.setHours(hh, mm, 0, 0); return s; })();
+
+                return (
+                  <div key={course.id} onClick={() => setSelectedCourseId(course.id)} className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${isActive ? 'bg-blue-50/60 border-[#2b4cdd] ring-1 ring-[#2b4cdd]/30 shadow-md transform scale-[1.02]' : isExpired ? 'bg-slate-50/60 border-slate-100 opacity-50' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
+                    {isActive && <div className="absolute left-0 top-0 w-1 h-full bg-[#2b4cdd]"></div>}
+                    <div className="flex items-start justify-between mb-3">
+                      <h5 className={`font-bold text-[16px] ${isActive ? 'text-[#2b4cdd]' : isExpired ? 'text-slate-400' : 'text-slate-700'}`}>{course.subjectCode} {course.subjectName}</h5>
+                      {isOpenScan && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>เปิดสแกน</span>}
+                      {isExpired && <span className="text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full whitespace-nowrap">หมดเวลา</span>}
+                    </div>
+                    <div className="flex flex-col gap-2 text-[13px] text-slate-500 font-medium">
+                      <div className="flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-200/60 text-slate-600 w-fit"><Calendar size={13} className="mr-1.5"/>{getThaiDay(course.scheduleDay)}</div>
+                      <span className="flex items-center ml-1"><Clock size={14} className="mr-2 text-slate-400"/> {course.startTime?.substring(0,5)} - {course.endTime?.substring(0,5)}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

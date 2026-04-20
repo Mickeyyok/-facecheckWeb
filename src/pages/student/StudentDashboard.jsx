@@ -86,19 +86,27 @@ export default function StudentDashboard() {
     fetchMyClasses();
   }, [user]);
 
-  // 2. ดึงข้อมูลวิชาแบบละเอียด (รวม scheduledDates)
+  // 2. ดึงข้อมูลวิชาแบบละเอียด (รวม scheduledDates) + auto-refresh ทุก 30 วิ
   useEffect(() => {
+    let isInitialFetch = true;
     const fetchFullCourseData = async () => {
       if (selectedCourseId) {
         try {
           const data = await classService.getClassById(selectedCourseId);
           setActiveCourseDetail(data);
-          // รีเซ็ตสถานะการเช็กชื่อเมื่อเปลี่ยนวิชา เพื่อรอการตรวจสอบจากสถิติใหม่
-          setIsCheckedIn(false); 
+          // รีเซ็ตสถานะการเช็กชื่อเฉพาะตอนเปลี่ยนวิชาเท่านั้น (ไม่รีเซ็ตตอน auto-refresh)
+          if (isInitialFetch) {
+            setIsCheckedIn(false);
+            isInitialFetch = false;
+          }
         } catch (err) { console.error('ดึงข้อมูลวิชาแบบละเอียดไม่สำเร็จ', err); }
       }
     };
     fetchFullCourseData();
+
+    // ✅ Auto-refresh ทุก 30 วินาที เพื่อรับสถานะยกเลิกคลาสจากอาจารย์
+    const interval = setInterval(fetchFullCourseData, 30000);
+    return () => clearInterval(interval);
   }, [selectedCourseId]);
 
   // 3. ดึงสถิติ

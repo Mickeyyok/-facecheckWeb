@@ -1,31 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X, Calendar, AlertOctagon } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { attendanceService } from '../../services/attendanceService';
 import { classService } from '../../services/classService';
+import api from '../../services/api';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
 
-  // --- States หน้าจอเดิม ---
-  const [showUpcomingAlert, setShowUpcomingAlert] = useState(true);
-  const [isClassCanceled, setIsClassCanceled] = useState(false);
-  
-  // --- States สำหรับคลาสเรียน (ดึงจาก API) ---
   const [studentClasses, setStudentClasses] = useState([]);
-  const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [selectedCourseId, setSelectedCourseId] = useState(null);
+  const [activeCourseDetail, setActiveCourseDetail] = useState(null); 
+  const [classStats, setClassStats] = useState({ present: 0, late: 0, absent: 0 });
   
-  // --- States สำหรับระบบ Check-in ---
   const videoRef = useRef();
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [scanStep, setScanStep] = useState(0); // 0=GPS, 1=Camera, 2=Success, 3=Error
+  const [scanStep, setScanStep] = useState(0); 
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 1. โหลดโมเดล AI และดึงข้อมูลคลาสเรียน (ทำครั้งเดียวตอนเปิดหน้า)
+  // 1. โหลดโมเดลและรายชื่อวิชา
   useEffect(() => {
     const loadModels = async () => {
       const MODEL_URL = '/models';
@@ -36,9 +33,7 @@ export default function StudentDashboard() {
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
         setModelsLoaded(true);
-      } catch (err) {
-        console.error('โหลดโมเดลไม่สำเร็จ:', err);
-      }
+      } catch (err) { console.error('โหลดโมเดลไม่สำเร็จ:', err); }
     };
 
     const fetchMyClasses = async () => {
@@ -46,459 +41,298 @@ export default function StudentDashboard() {
         try {
           const data = await classService.getClassesByStudent(user.id);
           setStudentClasses(data);
-        } catch (err) {
-          console.error('โหลดคลาสเรียนล้มเหลว', err);
-        }
-      }
-    };
-
-    const fetchAttendanceHistory = async () => {
-      try {
-        setStatsLoading(true);
-        if (user?.id) {
-          const data = await attendanceService.getHistoryByStudent(user.id);
-          setAttendanceHistory(data);
-        }
-      } catch (err) {
-        console.error('โหลดประวัติเข้าเรียนล้มเหลว', err);
-      } finally {
-        setStatsLoading(false);
+          if (data.length > 0 && !selectedCourseId) {
+            setSelectedCourseId(data[0].id);
+          }
+        } catch (err) { console.error('โหลดคลาสเรียนล้มเหลว', err); }
       }
     };
 
     loadModels();
     fetchMyClasses();
-    fetchAttendanceHistory();
   }, [user]);
 
-  // --- นาฬิกา real-time (อัพเดททุก 10 วินาที) ---
-  const [now, setNow] = useState(new Date());
+  // 2. ดึงข้อมูลวิชาแบบละเอียด (รวม scheduledDates)
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 10000);
-    return () => clearInterval(timer);
-  }, []);
+    const fetchFullCourseData = async () => {
+      if (selectedCourseId) {
+        try {
+          const data = await classService.getClassById(selectedCourseId);
+          setActiveCourseDetail(data);
+          // รีเซ็ตสถานะการเช็กชื่อเมื่อเปลี่ยนวิชา เพื่อรอการตรวจสอบจากสถิติใหม่
+          setIsCheckedIn(false); 
+        } catch (err) { console.error('ดึงข้อมูลวิชาแบบละเอียดไม่สำเร็จ', err); }
+      }
+    };
+    fetchFullCourseData();
+  }, [selectedCourseId]);
 
-  // --- ฟังก์ชันคำนวณเวลาปิดสแกนของแต่ละวิชา ---
-  const getCourseDeadline = (course) => {
-    if (!course?.startTime) return null;
+  // 3. ดึงสถิติ
+  useEffect(() => {
+    const fetchCourseStats = async () => {
+      if (user?.id && selectedCourseId) {
+        try {
+          setStatsLoading(true);
+          const res = await api.get(`/attendance/student/${user.id}/stats/${selectedCourseId}`);
+          setClassStats({
+            present: res.data.present || 0,
+            late: res.data.late || 0,
+            absent: res.data.absent || 0
+          });
+        } catch (err) {
+          setClassStats({ present: 0, late: 0, absent: 0 });
+        } finally { setStatsLoading(false); }
+      }
+    };
+    fetchCourseStats();
+  }, [user, selectedCourseId]);
+
+  const activeCourse = (activeCourseDetail && activeCourseDetail.id === selectedCourseId) 
+    ? activeCourseDetail 
+    : (studentClasses.find(c => c.id === selectedCourseId) || null);
+
+  const getCheckInTimeLimits = (course) => {
+    if (!course || !course.startTime) return null;
     const start = course.startTime.substring(0, 5);
-    const [h, m] = start.split(':').map(Number);
-    const lateMin = course.lateThresholdMinutes || 15;
-    const absentMin = lateMin * 2;
-    const absentTotalMin = h * 60 + m + absentMin;
-    const deadline = new Date();
-    deadline.setHours(Math.floor(absentTotalMin / 60), absentTotalMin % 60, 0, 0);
-    return deadline;
+    const [startH, startM] = start.split(':').map(Number);
+    const lateThreshold = course.lateThresholdMinutes ?? 15;
+    const lateTotalMinutes = startH * 60 + startM + lateThreshold;
+    const latePoint = `${String(Math.floor(lateTotalMinutes / 60)).padStart(2, '0')}:${String(lateTotalMinutes % 60).padStart(2, '0')}`;
+    const absentPoint = (course.endTime || "23:59").substring(0, 5);
+    return { start, late: latePoint, absent: absentPoint };
   };
 
-  // --- เลือกวิชาที่ยังเปิดสแกนอยู่ (ข้ามวิชาที่หมดเวลาแล้ว ไปวิชาถัดไป) ---
-  const activeCourse = (() => {
-    if (studentClasses.length === 0) return null;
-    // เรียงตาม startTime
-    const sorted = [...studentClasses].sort((a, b) => {
-      const aTime = a.startTime || '00:00';
-      const bTime = b.startTime || '00:00';
-      return aTime.localeCompare(bTime);
-    });
-    // หาวิชาแรกที่ยังไม่หมดเวลาสแกน
-    for (const course of sorted) {
-      const deadline = getCourseDeadline(course);
-      if (!deadline || now <= deadline) return course;
-    }
-    // ทุกวิชาหมดเวลาแล้ว → ไม่แสดงวิชาใดเลย
-    return null;
-  })();
+  const timeLimits = getCheckInTimeLimits(activeCourse);
 
-  const scanDeadline = activeCourse ? getCourseDeadline(activeCourse) : null;
-  const isScanClosed = scanDeadline ? now > scanDeadline : false;
-  const scanDeadlineStr = scanDeadline
-    ? `${String(scanDeadline.getHours()).padStart(2, '0')}:${String(scanDeadline.getMinutes()).padStart(2, '0')}`
-    : null;
+  const getThaiDay = (dayStr) => {
+    const days = { 'MONDAY': 'วันจันทร์', 'MON': 'วันจันทร์', 'TUESDAY': 'วันอังคาร', 'TUE': 'วันอังคาร', 'WEDNESDAY': 'วันพุธ', 'WED': 'วันพุธ', 'THURSDAY': 'วันพฤหัสบดี', 'THU': 'วันพฤหัสบดี', 'FRIDAY': 'วันศุกร์', 'FRI': 'วันศุกร์', 'SATURDAY': 'วันเสาร์', 'SAT': 'วันเสาร์', 'SUNDAY': 'วันอาทิตย์', 'SUN': 'วันอาทิตย์' };
+    return days[dayStr?.toUpperCase()] || dayStr;
+  };
 
-  // 2. ฟังก์ชันขอพิกัด GPS
   const getLocation = () => {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('เบราว์เซอร์ของคุณไม่รองรับ GPS'));
-      } else {
-        navigator.geolocation.getCurrentPosition(
-          (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
-          (err) => reject(new Error('โปรดกดอนุญาต (Allow) การเข้าถึงตำแหน่ง GPS ของคุณ'))
-        );
-      }
+      if (!navigator.geolocation) reject(new Error('เบราว์เซอร์ของคุณไม่รองรับ GPS'));
+      else navigator.geolocation.getCurrentPosition((pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }), (err) => reject(new Error('โปรดอนุญาตการเข้าถึง GPS')));
     });
   };
 
-  // 3. ฟังก์ชันเปิด/ปิดกล้อง
-  const startVideo = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      throw new Error('ไม่สามารถเปิดกล้องได้ โปรดอนุญาตการเข้าถึงกล้อง');
-    }
-  };
+  const stopVideo = () => { if (videoRef.current && videoRef.current.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop()); };
 
-  const stopVideo = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  // 4. กระบวนการสแกนและส่งข้อมูลไป Backend
   const processCheckIn = async () => {
-    if (!activeCourse) {
-      alert('ไม่พบวิชาเรียนที่กำลังเปิดให้เช็คชื่อ');
-      return;
-    }
-
+    if (!activeCourse) return;
     try {
-      setScanStep(0);
-      setErrorMessage('');
+      setScanStep(0); setErrorMessage('');
       const { lat, lng } = await getLocation();
-
-      setScanStep(1);
-      await startVideo();
-      await new Promise(r => setTimeout(r, 1500)); // รอภาพกล้องชัด
-
+      setScanStep(1); 
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      await new Promise(r => setTimeout(r, 1500));
       let descriptor = null;
       for (let i = 0; i < 50; i++) {
         if (videoRef.current && videoRef.current.readyState === 4) {
-          const detection = await faceapi
-            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-            
-          if (detection) {
-            descriptor = detection.descriptor;
-            break;
-          }
+          const det = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+          if (det) { descriptor = det.descriptor; break; }
         }
-        await new Promise(r => setTimeout(r, 100)); 
+        await new Promise(r => setTimeout(r, 100));
       }
-
-      if (!descriptor) throw new Error('ไม่พบใบหน้า หรือหันหน้าไม่ตรงกล้อง กรุณาลองใหม่');
-
+      if (!descriptor) throw new Error('ไม่พบใบหน้า หรือหันหน้าไม่ตรงกล้อง');
       stopVideo();
-
-      // ✅ 1. เพิ่มโค้ดดึงข้อมูล User จาก LocalStorage มาช่วยเผื่อ useAuth โหลดไม่ทัน
-      const localUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const actualStudentId = user?.studentId || localUser?.studentId || "2310511101060";
-
-      console.log("กำลังส่งข้อมูลเช็คชื่อของรหัส:", actualStudentId); // เช็คใน Console (F12) ได้ว่าส่งถูกคนไหม
-
-      // ยิง API ไป Spring Boot (ใช้ข้อมูลจริง)
-      const checkInData = {
-        classId: activeCourse.id, 
-        studentId: actualStudentId, // ✅ 2. ใช้ตัวแปรที่ดึงรหัสมาอย่างถูกต้อง
-        latitude: lat,
-        longitude: lng,
-        faceDescriptor: Array.from(descriptor)
-      };
-
-      await attendanceService.checkIn(checkInData);
+      const actualStudentId = user?.studentId || JSON.parse(localStorage.getItem('user'))?.studentId || "2310511101060";
       
-      setScanStep(2);
-      setIsCheckedIn(true);
-
-    } catch (err) {
-      stopVideo();
-      setErrorMessage(err.message || 'ระบบขัดข้อง กรุณาลองใหม่');
-      setScanStep(3);
+      const res = await attendanceService.checkIn({ 
+        classId: activeCourse.id, 
+        studentId: actualStudentId, 
+        latitude: lat, 
+        longitude: lng, 
+        faceDescriptor: Array.from(descriptor) 
+      });
+      
+      setScanStep(2); 
+      setIsCheckedIn(true); // ✅ ล็อคสถานะสำเร็จ
+      
+      // อัปเดตสถิติทันที
+      if (res.status === 'late') {
+        setClassStats(prev => ({ ...prev, late: prev.late + 1 }));
+      } else {
+        setClassStats(prev => ({ ...prev, present: prev.present + 1 }));
+      }
+      
+    } catch (err) { 
+      stopVideo(); 
+      // ดักจับกรณี Backend บอกว่าเคยเช็คชื่อไปแล้ว
+      if (err.response?.status === 409) {
+        setIsCheckedIn(true);
+        setShowCheckInModal(false);
+        alert("คุณได้เช็กชื่อวิชานี้ไปเรียบร้อยแล้วในวันนี้");
+      } else {
+        setErrorMessage(err.message || "เช็คชื่อไม่สำเร็จ"); 
+        setScanStep(3); 
+      }
     }
   };
 
-  const handleCheckIn = () => {
-    if (!modelsLoaded) return alert('ระบบ AI กำลังโหลดข้อมูล กรุณารอสักครู่...');
-    if (!activeCourse) return alert('ยังไม่มีวิชาเรียนที่ต้องเช็คชื่อในตอนนี้');
-    if (isScanClosed) return alert(`ปิดระบบเช็คชื่อแล้ว (หมดเวลาตั้งแต่ ${scanDeadlineStr} น.)`);
-    setShowCheckInModal(true);
-    processCheckIn();
-  };
-
-  const closeCheckInModal = () => {
-    stopVideo();
-    setShowCheckInModal(false);
-  };
-
-  // คำนวณสถิติจาก attendance history จริง
-  const computeStats = (items) => ({
-    present: items.filter(h => h.status?.toUpperCase() === 'PRESENT').length,
-    late: items.filter(h => h.status?.toUpperCase() === 'LATE').length,
-    absent: items.filter(h => h.status?.toUpperCase() === 'ABSENT').length,
-  });
-
-  const displayStats = activeCourse
-    ? computeStats(attendanceHistory.filter(h => h.subjectCode === activeCourse.subjectCode))
-    : computeStats(attendanceHistory);
+  const aiAnalysis = ((absentCount) => {
+    if (absentCount >= 4) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: '🚨 ตัดสิทธิ์สอบ!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง เกินเกณฑ์แล้ว` };
+    if (absentCount === 3) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: '⚠️ AI Warning: เสี่ยงหมดสิทธิ์สอบ!', msg: 'ขาดเรียน 3 ครั้งแล้ว ระวังถูกตัดสิทธิ์สอบ' };
+    return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'AI Suggestion', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
+  })(classStats.absent);
 
   return (
-    <div className="p-8 lg:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-[1400px] mx-auto space-y-8">
-      
-      {/* Header ภาพรวมการเรียน */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h3 className="text-[28px] font-extrabold text-slate-800 tracking-tight flex items-center flex-wrap gap-3">
-          ภาพรวมการเรียน
-          {activeCourse && (
-            <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg tracking-wide">
-              วิชา {activeCourse.subjectName}
-            </span>
-          )}
-        </h3>
-      </div>
+    <div className="p-8 lg:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-[1400px] mx-auto space-y-8 text-slate-800">
+      <h3 className="text-[28px] font-extrabold flex items-center flex-wrap gap-3">
+        ภาพรวมการเรียน {activeCourse && <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg">กำลังดู: วิชา {activeCourse.subjectName}</span>}
+      </h3>
 
-      {/* แถบแจ้งเตือนเตรียมตัวสแกนหน้า (ซ่อนถ้าไม่มีวิชา) */}
-      {activeCourse && showUpcomingAlert && (
-        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200/60 p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden pr-12">
-          <div className="absolute left-0 top-0 w-1.5 h-full bg-amber-400"></div>
-          <div className="flex items-center pl-2">
-            <div className="bg-amber-100 p-2.5 rounded-full mr-4 shrink-0 shadow-inner">
-              <Bell className="text-amber-600 animate-pulse" size={20} />
-            </div>
-            <div>
-              <p className="text-amber-900 font-bold text-base">แจ้งเตือนเตรียมตัวเข้าเรียน</p>
-              <p className="text-sm text-amber-700/80 mt-0.5 font-medium">
-                ใกล้ถึงเวลาเรียนวิชา <span className="font-bold text-amber-800">{activeCourse.subjectName}</span>
-              </p>
-            </div>
-          </div>
-          <button 
-            onClick={() => setShowUpcomingAlert(false)} 
-            className="absolute top-1/2 -translate-y-1/2 right-4 text-amber-400 hover:text-amber-600 bg-amber-100/50 hover:bg-amber-100 rounded-full p-1.5 transition-all"
-            title="ปิดการแจ้งเตือน"
-          >
-            <X size={20} strokeWidth={2.5} />
-          </button>
-        </div>
-      )}
-
-      {/* สรุปการเข้าเรียน 3 กล่อง */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">เข้าเรียนตรงเวลา</p>
-            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.present}</p>}
-          </div>
-          <div className="w-[52px] h-[52px] rounded-full bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center text-emerald-500">
-            <CheckCircle size={26} strokeWidth={2.5} />
-          </div>
+        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between">
+          <div><p className="text-[13px] text-slate-500 font-bold mb-1">เข้าเรียนตรงเวลา</p><p className="text-3xl font-black">{classStats.present}</p></div>
+          <div className="w-[52px] h-[52px] rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center"><CheckCircle size={26} strokeWidth={2.5}/></div>
         </div>
-        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">มาสาย</p>
-            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.late}</p>}
-          </div>
-          <div className="w-[52px] h-[52px] rounded-full bg-amber-50 border-2 border-amber-100 flex items-center justify-center text-amber-500">
-            <AlertTriangle size={26} strokeWidth={2.5} />
-          </div>
+        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between">
+          <div><p className="text-[13px] text-slate-500 font-bold mb-1">มาสาย</p><p className="text-3xl font-black">{classStats.late}</p></div>
+          <div className="w-[52px] h-[52px] rounded-full bg-amber-50 text-amber-500 flex items-center justify-center"><AlertTriangle size={26} strokeWidth={2.5}/></div>
         </div>
-        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition-shadow">
-          <div>
-            <p className="text-[13px] text-slate-500 font-bold mb-1 tracking-wide">ขาดเรียน</p>
-            {statsLoading ? <div className="h-9 w-12 bg-slate-100 animate-pulse rounded-lg mt-1"></div> : <p className="text-3xl font-black text-slate-800">{displayStats.absent}</p>}
-          </div>
-          <div className="w-[52px] h-[52px] rounded-full bg-rose-50 border-2 border-rose-100 flex items-center justify-center text-rose-500">
-            <XCircle size={26} strokeWidth={2.5} />
-          </div>
+        <div className="bg-white p-7 rounded-[1.25rem] shadow-sm border border-slate-200/80 flex items-center justify-between">
+          <div><p className="text-[13px] text-slate-500 font-bold mb-1">ขาดเรียน</p><p className="text-3xl font-black">{classStats.absent}</p></div>
+          <div className="w-[52px] h-[52px] rounded-full bg-rose-50 text-rose-500 flex items-center justify-center"><XCircle size={26} strokeWidth={2.5}/></div>
         </div>
       </div>
 
-      {/* 2 Columns: เช็กชื่อ/AI (ซ้าย) | ตารางเรียน (ขวา) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* คอลัมน์ซ้าย */}
         <div className="lg:col-span-2 space-y-8">
-          
-          {/* กล่องเช็กชื่อ */}
-          <div className={`rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden flex flex-col justify-between min-h-[260px] transition-all duration-500 ${isClassCanceled ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-md' : 'bg-gradient-to-br from-[#2b4cdd] to-[#1e3ab8] shadow-[0_15px_40px_-10px_rgba(43,76,221,0.5)]'}`}>
+          <div className="rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden flex flex-col justify-between min-h-[260px] transition-all duration-500 bg-gradient-to-br from-[#2b4cdd] to-[#1e3ab8] shadow-[0_15px_40px_-10px_rgba(43,76,221,0.5)]">
             <div className="relative z-10 flex flex-col md:flex-row md:justify-between items-start">
               <div>
-                <div className="flex items-center space-x-2.5 mb-4">
-                  {isClassCanceled ? (
-                    <span className="bg-rose-500/20 text-rose-100 border border-rose-400/30 px-3.5 py-1.5 rounded-full text-xs font-bold backdrop-blur-md tracking-wider flex items-center">
-                      <div className="w-2 h-2 bg-rose-400 rounded-full mr-2 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>
-                      ยกเลิกคลาสเรียนวันนี้
-                    </span>
-                  ) : activeCourse ? (
-                    <span className="bg-white/10 px-3.5 py-1.5 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 tracking-wider flex items-center">
-                      <div className="w-2 h-2 bg-emerald-400 rounded-full mr-2 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></div>
-                      กำลังมีการเรียนการสอน
-                    </span>
-                  ) : (
-                    <span className="bg-white/10 px-3.5 py-1.5 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 tracking-wider flex items-center">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full mr-2"></div>
-                      ไม่มีคลาสเรียน
-                    </span>
-                  )}
-                </div>
-                <h3 className={`text-3xl md:text-[40px] font-black tracking-tight mb-2 leading-tight ${isClassCanceled ? 'text-slate-300' : 'text-white'}`}>
-                  {activeCourse ? activeCourse.subjectName : 'ยังไม่มีวิชาเรียน'}
-                </h3>
-                <p className={`${isClassCanceled ? 'text-slate-400' : 'text-blue-200'} text-[15px] font-medium`}>
-                  {activeCourse ? `รหัสวิชา ${activeCourse.subjectCode}` : 'กรุณารออาจารย์เพิ่มรายชื่อลงในคลาส'}
-                </p>
+                <h3 className="text-3xl md:text-[40px] font-black mb-2">{activeCourse?.subjectName || 'ยังไม่ได้เลือกวิชา'}</h3>
+                <p className="text-blue-200 text-[15px] font-medium">รหัสวิชา {activeCourse?.subjectCode} • <span className="font-bold text-white">{getThaiDay(activeCourse?.scheduleDay)}</span></p>
               </div>
               
-              <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4 text-center min-w-[130px] mt-6 md:mt-0 self-start shadow-inner">
-                <p className={`text-[11px] font-extrabold uppercase tracking-widest mb-1.5 ${isClassCanceled ? 'text-slate-400' : 'text-blue-200'}`}>เวลาเรียน</p>
-                <p className={`text-xl font-black tracking-wide ${isClassCanceled ? 'text-slate-300 opacity-50 line-through' : 'text-white'}`}>
-                  {activeCourse && activeCourse.startTime ? activeCourse.startTime.substring(0, 5) : '00:00'} -<br/>
-                  {activeCourse && activeCourse.endTime ? activeCourse.endTime.substring(0, 5) : '00:00'}
-                </p>
+              <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-5 mt-6 md:mt-0 min-w-[220px]">
+                <p className="text-xs font-extrabold uppercase text-blue-200 mb-3 border-b border-white/20 pb-2">ช่วงเวลาเช็คชื่อ</p>
+                {timeLimits && (
+                  <div className="space-y-2.5">
+                    <div className="flex justify-between items-center text-sm"><span className="flex items-center text-emerald-300 font-semibold"><CheckCircle size={14} className="mr-1.5" /> ตรงเวลา</span><span className="font-bold">{timeLimits.start} น.</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="flex items-center text-amber-300 font-semibold"><AlertTriangle size={14} className="mr-1.5" /> มาสาย</span><span className="font-bold">{timeLimits.late} น.</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="flex items-center text-rose-300 font-semibold"><XCircle size={14} className="mr-1.5" /> ขาดเรียน</span><span className="font-bold">{timeLimits.absent} น.</span></div>
+                  </div>
+                )}
               </div>
             </div>
-            
+
             <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-end mt-10 gap-5">
-              <div className={`bg-black/20 border border-white/10 px-5 py-3 rounded-full flex items-center space-x-3 backdrop-blur-md ${isClassCanceled || !activeCourse ? 'opacity-50' : ''}`}>
-                <MapPin size={18} className={isClassCanceled || !activeCourse ? 'text-slate-400' : 'text-blue-300'} />
-                <span className="text-[15px] font-semibold tracking-wide">
-                  ห้อง {activeCourse ? activeCourse.room : '-'}
-                </span>
-              </div>
+              <div className="bg-black/20 border border-white/10 px-5 py-3 rounded-full flex items-center space-x-3 backdrop-blur-md"><MapPin size={18} className="text-blue-300"/><span className="text-[15px] font-semibold">ห้อง {activeCourse?.room || '-'}</span></div>
               
-              {isClassCanceled ? (
-                <div className="bg-white/5 text-white/40 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed border border-white/10 backdrop-blur-sm">
-                  <XCircle size={20} strokeWidth={2.5} /><span>ปิดระบบเช็กชื่อแล้ว</span>
-                </div>
-              ) : isCheckedIn ? (
-                <div className="bg-emerald-500 text-white px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed shadow-lg border border-emerald-400">
-                  <CheckCircle size={20} strokeWidth={2.5} /><span>เช็กชื่อเรียบร้อยแล้ว</span>
-                </div>
-              ) : isScanClosed && activeCourse ? (
-                <div className="bg-rose-500/20 text-rose-100 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed border border-rose-400/30 backdrop-blur-sm">
-                  <Clock size={20} strokeWidth={2.5} /><span>หมดเวลาสแกน ({scanDeadlineStr} น.)</span>
-                </div>
-              ) : activeCourse ? (
-                <button onClick={handleCheckIn} className="bg-white text-[#2b4cdd] px-8 py-4 rounded-xl font-extrabold text-[16px] hover:bg-blue-50 shadow-xl flex items-center justify-center space-x-2.5 transform transition-all hover:-translate-y-1 hover:shadow-2xl active:scale-95 w-full sm:w-auto">
-                  <Camera size={20} strokeWidth={2.5} /><span>เช็กชื่อเข้าเรียน</span>
-                </button>
-              ) : (
-                <button disabled className="bg-white/20 text-white/50 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 cursor-not-allowed w-full sm:w-auto">
-                  <span>ไม่มีคลาสให้เช็คชื่อ</span>
-                </button>
-              )}
+              {/* ✅ SMART BUTTON LOGIC - แก้ไขลำดับ Priority ใหม่เพื่อให้ปุ่มเขียวหายไปเมื่อหมดเวลา */}
+              {(() => {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const todayStr = `${year}-${month}-${day}`;
+                
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                const [sH, sM] = (activeCourse?.startTime || "00:00").split(':').map(Number);
+                const [eH, eM] = (activeCourse?.endTime || "23:59").split(':').map(Number);
+                const startMin = sH * 60 + sM;
+                const endMin = eH * 60 + eM;
+
+                let scheduledDates = [];
+                try { 
+                  scheduledDates = typeof activeCourse?.scheduledDates === 'string' 
+                    ? JSON.parse(activeCourse.scheduledDates) 
+                    : (activeCourse?.scheduledDates || []); 
+                } catch(e) {}
+                
+                const isTodayClass = scheduledDates.some(d => d.date === todayStr);
+
+                // 1. ตรวจสอบว่าเลือกวิชาหรือยัง
+                if (!activeCourse) return <button disabled className="bg-white/20 text-white/50 px-8 py-4 rounded-xl font-extrabold cursor-not-allowed w-full sm:w-auto">ยังไม่ได้เลือกวิชา</button>;
+                
+                // 2. ตรวจสอบว่าวันนี้มีเรียนตามตารางไหม
+                if (!isTodayClass) return <div className="bg-white/10 text-white/60 px-8 py-4 rounded-xl font-extrabold border border-white/10 backdrop-blur-sm cursor-not-allowed flex items-center justify-center space-x-2 w-full sm:w-auto"><span>วันนี้ไม่มีคลาสเรียน</span></div>;
+
+                // 🔴 3. เช็คเวลาหมดเขต (PRIORITY 1: สำคัญที่สุด)
+                // ถ้าเลยเวลาเลิกคลาสแล้ว ไม่ว่าจะเช็คชื่อแล้วหรือยัง ต้องขึ้นว่า "หมดเวลาเรียนแล้ว"
+                if (nowMin > endMin) return (
+                  <div className="bg-rose-500/20 text-rose-200 px-8 py-4 rounded-xl font-extrabold flex items-center justify-center space-x-2.5 border border-rose-500/30 w-full sm:w-auto">
+                    <XCircle size={20}/>
+                    <span>หมดเวลาเรียนแล้ว ({activeCourse.endTime})</span>
+                  </div>
+                );
+
+                // 🟠 4. เช็คเวลาเริ่ม (PRIORITY 2)
+                // ถ้ายังไม่ถึงเวลาเริ่มเรียน
+                if (nowMin < startMin) return (
+                  <div className="bg-amber-500/20 text-amber-200 px-8 py-4 rounded-xl font-extrabold flex items-center justify-center space-x-2.5 border border-amber-500/30 w-fit">
+                    <Clock size={20} className="animate-pulse" />
+                    <span>ยังไม่ถึงเวลาเรียน ({activeCourse.startTime} น.)</span>
+                  </div>
+                );
+
+                // 🟢 5. เช็คสถานะการเช็คชื่อ (PRIORITY 3)
+                // ถ้าอยู่ในเวลาเรียน แล้วสแกนผ่านแล้ว ถึงจะโชว์ปุ่มเขียว
+                if (isCheckedIn || classStats.present > 0 || classStats.late > 0) return (
+                  <div className="bg-emerald-500 text-white px-8 py-4 rounded-xl font-extrabold flex items-center justify-center space-x-2.5 shadow-lg border border-emerald-400 w-full sm:w-auto">
+                    <CheckCircle size={20}/>
+                    <span>เช็กชื่อเรียบร้อยแล้ว</span>
+                  </div>
+                );
+
+                // 🔵 6. ปุ่มปกติ (อยู่ในเวลาเรียน และยังไม่เคยเช็ค)
+                return (
+                  <button 
+                    onClick={() => { setShowCheckInModal(true); processCheckIn(); }} 
+                    className="bg-white text-[#2b4cdd] px-8 py-4 rounded-xl font-extrabold shadow-xl flex items-center justify-center space-x-2.5 transform transition-all active:scale-95 hover:bg-blue-50 w-full sm:w-auto"
+                  >
+                    <Camera size={20}/>
+                    <span>คลิกเพื่อเช็กชื่อ</span>
+                  </button>
+                );
+              })()}
             </div>
-            <div className={`absolute top-0 right-0 w-[400px] h-[400px] rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none ${isClassCanceled ? 'bg-slate-500 opacity-10' : 'bg-white opacity-[0.03]'}`}></div>
           </div>
 
-          {/* AI Suggestion Card */}
-          <div className="bg-[#131B2F] rounded-[2rem] shadow-xl p-8 text-white relative overflow-hidden group flex flex-col sm:flex-row items-center gap-6">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 opacity-10 rounded-full blur-3xl pointer-events-none group-hover:opacity-20 transition-opacity duration-500"></div>
-            <div className="w-16 h-16 shrink-0 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 backdrop-blur-md z-10">
-              <Brain className="text-yellow-400" size={32} strokeWidth={1.5} />
-            </div>
-            <div className="text-center sm:text-left z-10">
-              <h4 className="font-extrabold mb-2 text-xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AI Suggestion</h4>
-              <p className="text-[15px] text-slate-300 leading-relaxed font-medium">
-                "หมั่นเข้าเรียนให้ตรงเวลานะครับ การเช็คชื่อผ่านระบบ FaceCheck จะช่วยบันทึกสถิติที่แม่นยำให้กับคุณ!"
-              </p>
+          <div className={`rounded-[2rem] shadow-xl p-8 text-white relative overflow-hidden group flex flex-col sm:flex-row items-center gap-6 bg-gradient-to-br transition-all duration-500 ring-2 ${aiAnalysis.color}`}>
+            <div className={`w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center border backdrop-blur-md z-10 bg-white/5 border-white/10`}>{aiAnalysis.icon}</div>
+            <div className="text-center sm:text-left z-10 w-full">
+              <h4 className="font-extrabold mb-2 text-xl tracking-wide">{aiAnalysis.title}</h4>
+              <p className="text-[15px] text-white/90 leading-relaxed font-medium">{aiAnalysis.msg}</p>
             </div>
           </div>
-
         </div>
 
-        {/* คอลัมน์ขวา: ตารางเรียน (ข้อมูลจริงจาก Database) */}
         <div className="lg:col-span-1 space-y-8 flex flex-col">
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200/60 p-7 flex-1">
-            <div className="flex items-center mb-6">
-              <div className="w-1.5 h-6 bg-[#2b4cdd] rounded-full mr-3"></div>
-              <h4 className="font-extrabold text-lg text-slate-800">ตารางเรียนของคุณ</h4>
-            </div>
-            
-            <div className="space-y-4">
-              {studentClasses.length === 0 ? (
-                <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-slate-500 font-medium">ยังไม่มีวิชาเรียนที่ลงทะเบียน</p>
-                  <p className="text-sm text-slate-400 mt-1">รออาจารย์เพิ่มชื่อเข้าคลาส</p>
+            <h4 className="font-extrabold text-lg mb-6 flex items-center"><div className="w-1.5 h-6 bg-[#2b4cdd] rounded-full mr-3"></div>วิชาที่ลงทะเบียน</h4>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {studentClasses.map((course) => (
+                <div key={course.id} onClick={() => setSelectedCourseId(course.id)} className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${selectedCourseId === course.id ? 'bg-blue-50/60 border-[#2b4cdd] ring-1 ring-[#2b4cdd]/30 shadow-md transform scale-[1.02]' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
+                  {selectedCourseId === course.id && <div className="absolute left-0 top-0 w-1 h-full bg-[#2b4cdd]"></div>}
+                  <h5 className={`font-bold text-[16px] mb-3 ${selectedCourseId === course.id ? 'text-[#2b4cdd]' : 'text-slate-700'}`}>{course.subjectCode} {course.subjectName}</h5>
+                  <div className="flex flex-col gap-2 text-[13px] text-slate-500 font-medium">
+                    <div className="flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-200/60 text-slate-600 w-fit"><Calendar size={13} className="mr-1.5"/>{getThaiDay(course.scheduleDay)}</div>
+                    <span className="flex items-center ml-1"><Clock size={14} className="mr-2 text-slate-400"/> {course.startTime?.substring(0,5)} - {course.endTime?.substring(0,5)}</span>
+                  </div>
                 </div>
-              ) : (
-                [...studentClasses].sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00')).map((course) => {
-                  const isActive = activeCourse && course.id === activeCourse.id;
-                  const dl = getCourseDeadline(course);
-                  const isExpired = dl ? now > dl : false;
-                  return (
-                    <div key={course.id} className={`p-5 rounded-2xl border transition-all ${isActive ? 'bg-blue-50/60 border-blue-200 shadow-sm' : isExpired ? 'bg-slate-50 border-slate-100 opacity-50' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
-                      <div className="flex justify-between items-start mb-2.5">
-                        <h5 className={`font-bold text-[16px] ${isActive ? 'text-blue-900' : isExpired ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                          {course.subjectCode} {course.subjectName}
-                        </h5>
-                      </div>
-                      <div className="flex flex-col gap-1.5 text-[13px] text-slate-500 font-medium mb-3">
-                        <span className="flex items-center">
-                          <Clock size={14} className="mr-2 text-slate-400"/> 
-                          {course.startTime ? course.startTime.substring(0,5) : '-'} - {course.endTime ? course.endTime.substring(0,5) : '-'} • ห้อง {course.room || '-'}
-                        </span>
-                      </div>
-                      {isActive && (
-                        <span className="inline-block bg-white border border-blue-200 text-[#2b4cdd] text-[11px] font-extrabold px-3 py-1 rounded-full shadow-sm">
-                          กำลังเปิดเช็คชื่อ
-                        </span>
-                      )}
-                      {isExpired && !isActive && (
-                        <span className="inline-block bg-slate-100 border border-slate-200 text-slate-400 text-[11px] font-extrabold px-3 py-1 rounded-full">
-                          หมดเวลาแล้ว
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+              ))}
             </div>
-            
-            <button className="w-full mt-6 py-3 text-sm text-slate-500 font-bold border border-slate-200 bg-white rounded-xl hover:bg-slate-50 hover:text-slate-700 transition-colors">
-              ดูตารางทั้งหมด
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Modal Check-in พร้อมการทำงานจริง */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative">
-            <button onClick={closeCheckInModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10 bg-white/50 rounded-full p-1"><XCircle size={24} /></button>
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-center mb-1 text-slate-800">เช็กชื่อเข้าเรียน</h3>
-              <p className="text-center text-blue-600 font-medium text-sm mb-4">{activeCourse ? activeCourse.subjectName : ''}</p>
-              
-              <div className="bg-slate-900 aspect-[4/3] rounded-xl overflow-hidden relative flex flex-col items-center justify-center text-white mb-6 shadow-inner">
-                {scanStep === 0 && (
-                  <div className="flex flex-col items-center animate-pulse">
-                    <MapPin size={32} className="text-blue-400 mb-2" />
-                    <p className="font-medium text-sm">กำลังตรวจสอบพิกัด GPS...</p>
-                  </div>
-                )}
-                {scanStep === 1 && (
-                  <>
-                    <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0 border-2 border-green-400/80 m-8 rounded-xl animate-pulse flex items-center justify-center pointer-events-none">
-                      <span className="bg-black/60 px-3 py-1 rounded-full text-xs font-bold text-green-300 backdrop-blur-sm">กำลังวิเคราะห์ใบหน้า... มองตรงไปที่กล้อง</span>
-                    </div>
-                  </>
-                )}
-                {scanStep === 2 && (
-                  <div className="bg-green-500 absolute inset-0 flex flex-col items-center justify-center">
-                    <CheckCircle size={48} className="text-white mb-2" />
-                    <h4 className="text-2xl font-bold text-white mb-1">สำเร็จ!</h4>
-                    <p className="text-green-50 text-sm">เช็คชื่อและบันทึกพิกัดเรียบร้อย</p>
-                  </div>
-                )}
-                {scanStep === 3 && (
-                  <div className="bg-red-500 absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                    <AlertTriangle size={48} className="text-white mb-2" />
-                    <h4 className="text-xl font-bold text-white mb-1">ไม่สำเร็จ</h4>
-                    <p className="text-red-50 text-sm">{errorMessage}</p>
-                    <button onClick={processCheckIn} className="mt-4 bg-white text-red-600 font-bold px-4 py-2 rounded-lg text-sm hover:bg-red-50">ลองใหม่อีกครั้ง</button>
-                  </div>
-                )}
-              </div>
-              
-              {(scanStep === 2 || scanStep === 3) && (
-                <button onClick={closeCheckInModal} className="w-full mt-2 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition">ปิดหน้าต่าง</button>
-              )}
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 text-slate-800">
+            <button onClick={() => { stopVideo(); setShowCheckInModal(false); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><XCircle size={24}/></button>
+            <h3 className="text-xl font-bold text-center mb-1">เช็กชื่อเข้าเรียน</h3>
+            <p className="text-center text-blue-600 font-medium text-sm mb-4">{activeCourse?.subjectName}</p>
+            <div className="bg-slate-900 aspect-[4/3] rounded-xl overflow-hidden relative flex flex-col items-center justify-center text-white mb-6">
+              {scanStep === 0 && <div className="animate-pulse flex flex-col items-center"><MapPin size={32} className="text-blue-400 mb-2"/><p>ตรวจสอบพิกัด GPS...</p></div>}
+              {scanStep === 1 && <><video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover"/><div className="absolute inset-0 border-2 border-green-400/80 m-8 rounded-xl animate-pulse flex items-center justify-center"><span className="bg-black/60 px-3 py-1 rounded-full text-xs">กำลังวิเคราะห์ใบหน้า...</span></div></>}
+              {scanStep === 2 && <div className="bg-green-500 absolute inset-0 flex flex-col items-center justify-center text-white"><CheckCircle size={48} className="mb-2"/><h4>สำเร็จ!</h4></div>}
+              {scanStep === 3 && <div className="bg-red-500 absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white"><AlertTriangle size={48} className="mb-2"/><h4>ไม่สำเร็จ</h4><p className="text-sm">{errorMessage}</p><button onClick={() => processCheckIn()} className="mt-4 bg-white text-red-600 px-4 py-2 rounded-lg font-bold">ลองใหม่</button></div>}
             </div>
+            {(scanStep === 2 || scanStep === 3) && <button onClick={() => setShowCheckInModal(false)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">ปิดหน้าต่าง</button>}
           </div>
         </div>
       )}

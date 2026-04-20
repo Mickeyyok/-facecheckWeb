@@ -3,13 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock, 
   Target, AlertTriangle, Search, Plus, Trash2, Calendar, BarChart2, 
-  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft 
+  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft,
+  Upload, FileUp, CheckCircle2, AlertCircle, Loader2
 } from 'lucide-react';
 import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
+import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../context/AuthContext';
 
-// Component ป้ายสถานะ
 const StatusBadge = ({ status }) => {
   if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">✅ ตรงเวลา</span>;
   if (status === 'late') return <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">⚠️ สาย</span>;
@@ -22,9 +23,6 @@ export default function TeacherCourseDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // ==========================================
-  // 1. ประกาศตัวแปร State ทั้งหมดไว้บนสุด (ป้องกันจอขาว)
-  // ==========================================
   const [courseSubTab, setCourseSubTab] = useState('info');
   const [loadingCourse, setLoadingCourse] = useState(true);
 
@@ -60,30 +58,9 @@ export default function TeacherCourseDetail() {
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [dailyFilter, setDailyFilter] = useState('all');
 
-  // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
-  const [nowTime, setNowTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNowTime(new Date()), 10000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const getScanStatus = () => {
-    const { start, absent } = courseTimeSettings;
-    if (!start || !absent) return { isOpen: false, label: '-' };
-    const [sH, sM] = start.split(':').map(Number);
-    const [aH, aM] = absent.split(':').map(Number);
-    const nowMin = nowTime.getHours() * 60 + nowTime.getMinutes();
-    const startMin = sH * 60 + sM;
-    const absentMin = aH * 60 + aM;
-    if (nowMin >= startMin && nowMin < absentMin) return { isOpen: true, label: `เปิดสแกน (ปิด ${absent} น.)` };
-    if (nowMin >= absentMin) return { isOpen: false, label: `ปิดสแกนแล้ว (ตั้งแต่ ${absent} น.)` };
-    return { isOpen: false, label: `ยังไม่ถึงเวลา (เปิด ${start} น.)` };
-  };
-  const scanStatus = getScanStatus();
-
-  const [riskAlerts, setRiskAlerts] = useState([
-    { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' }
-  ]);
+  const [termStats, setTermStats] = useState([]);
+  const [loadingTerm, setLoadingTerm] = useState(false);
+  const [riskAlerts, setRiskAlerts] = useState([]);
 
   const [isClassCanceled, setIsClassCanceled] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -107,11 +84,27 @@ export default function TeacherCourseDetail() {
   const [showSendAlertModal, setShowSendAlertModal] = useState(false);
   const [alertToSend, setAlertToSend] = useState(null);
   const [alertToDelete, setAlertToDelete] = useState(null);
+  const [aiMessage, setAiMessage] = useState("");
 
+  // CSV Import states
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvPreview, setCsvPreview] = useState([]);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvImportProgress, setCsvImportProgress] = useState(0);
+  const [csvImportResult, setCsvImportResult] = useState(null);
 
-  // ==========================================
-  // 2. ดึงข้อมูล (useEffect)
-  // ==========================================
+  const formatThaiDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const isDatePast = (dateStr) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return new Date(dateStr) < today;
+  };
+  const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
+
   useEffect(() => {
     const fetchCourse = async () => {
       try {
@@ -126,16 +119,22 @@ export default function TeacherCourseDetail() {
           instructor: data.instructorName || user?.fullName || user?.name || ''
         }));
 
+        // ✅ คำนวณเวลาใหม่ ให้แสดงผลได้ตรงกัน
         if (data.startTime) {
-          const start = data.startTime.substring(0, 5);
-          const lateMin = data.lateThresholdMinutes || 15;
-          const absentMin = lateMin * 2;
-          
+          const start = data.startTime.substring(0, 5); // 09:00
           const [h, m] = start.split(':').map(Number);
+          
+          const lateMin = data.lateThresholdMinutes || 15;
           const lateTotal = h * 60 + m + lateMin;
-          const absentTotal = h * 60 + m + absentMin;
           const lateFmt = `${String(Math.floor(lateTotal / 60)).padStart(2, '0')}:${String(lateTotal % 60).padStart(2, '0')}`;
-          const absentFmt = `${String(Math.floor(absentTotal / 60)).padStart(2, '0')}:${String(absentTotal % 60).padStart(2, '0')}`;
+          
+          let absentFmt = "00:00";
+          if (data.endTime) {
+            absentFmt = data.endTime.substring(0, 5);
+          } else {
+             const absentTotal = h * 60 + m + (lateMin * 2);
+             absentFmt = `${String(Math.floor(absentTotal / 60)).padStart(2, '0')}:${String(absentTotal % 60).padStart(2, '0')}`;
+          }
           
           setCourseTimeSettings({ start, late: lateFmt, absent: absentFmt });
           setEditTimeForm({ start, late: lateFmt, absent: absentFmt });
@@ -152,9 +151,9 @@ export default function TeacherCourseDetail() {
           setEditLocationForm(newLoc);
         }
 
-        if (data.scheduledDatesJson) {
+        if (data.scheduledDates) {
           try {
-            setScheduledDates(JSON.parse(data.scheduledDatesJson));
+            setScheduledDates(JSON.parse(data.scheduledDates)); 
           } catch(e) {}
         }
       } catch (error) {
@@ -193,10 +192,78 @@ export default function TeacherCourseDetail() {
     }
   }, [courseSubTab, selectedDate, courseId]);
 
+  useEffect(() => {
+    if ((courseSubTab === 'term' || courseSubTab === 'alerts') && courseId) {
+      fetchTermStats();
+    }
+  }, [courseSubTab, courseId, scheduledDates.length, studentList.length]);
 
-  // ==========================================
-  // 3. คำนวณสถิติและจัดกลุ่ม
-  // ==========================================
+  const fetchTermStats = async () => {
+    if (studentList.length === 0) return;
+    try {
+      setLoadingTerm(true);
+      const data = await attendanceService.getAttendanceByClass(courseId);
+      const pastDatesCount = scheduledDates.filter(d => isDatePast(d.date) || isDateToday(d.date)).length;
+
+      const stats = studentList.map(student => {
+        const studentRecords = data.filter(a => 
+          a.studentId === student.studentId || 
+          a.userId === student.studentUserId || 
+          a.userId === student.id
+        );
+
+        const presentCount = studentRecords.filter(r => ['PRESENT', 'ON_TIME'].includes(r.status?.toUpperCase())).length;
+        const lateCount = studentRecords.filter(r => r.status?.toUpperCase() === 'LATE').length;
+        const recordedAbsent = studentRecords.filter(r => r.status?.toUpperCase() === 'ABSENT').length;
+        
+        const missingCount = Math.max(0, pastDatesCount - (presentCount + lateCount + recordedAbsent));
+        const totalAbsent = recordedAbsent + missingCount;
+        
+        const attendancePercent = pastDatesCount > 0 ? Math.round(((presentCount + lateCount) / pastDatesCount) * 100) : 100;
+        const absentPercent = pastDatesCount > 0 ? Math.round((totalAbsent / pastDatesCount) * 100) : 0;
+
+        const isRisk = pastDatesCount > 0 && (absentPercent >= 20 || totalAbsent >= 3);
+
+        return {
+          ...student,
+          presentCount,
+          lateCount,
+          absentCount: totalAbsent,
+          attendancePercent,
+          absentPercent,
+          isRisk
+        };
+      });
+
+      setTermStats(stats);
+      
+      const alerts = stats
+        .filter(s => s.isRisk)
+        .map((s, index) => ({
+          id: index + 1,
+          studentUserId: s.studentUserId || s.id,
+          studentId: s.studentId,
+          studentName: s.name,
+          issue: s.absentPercent >= 20 ? `ขาดเรียนสะสมถึง ${s.absentPercent}%` : `ขาดเรียนสะสม ${s.absentCount} ครั้ง`,
+          status: 'pending'
+        }));
+        
+      setRiskAlerts(alerts);
+    } catch (error) {
+      console.error("Error fetching term stats", error);
+    } finally {
+      setLoadingTerm(false);
+    }
+  };
+
+  const avgAttendance = termStats.length > 0 
+      ? Math.round(termStats.reduce((sum, s) => sum + s.attendancePercent, 0) / termStats.length) 
+      : 100;
+  let termGrade = 'ดีเยี่ยม';
+  let termColor = 'text-emerald-600 bg-emerald-50 border-emerald-200';
+  if (avgAttendance < 80) { termGrade = 'ปานกลาง'; termColor = 'text-yellow-600 bg-yellow-50 border-yellow-200'; }
+  if (avgAttendance < 60) { termGrade = 'วิกฤต (ต้องปรับปรุง)'; termColor = 'text-red-600 bg-red-50 border-red-200'; }
+
   const scheduledDateList = scheduledDates.map(d => d.date).sort();
   const selectedDateIndex = scheduledDateList.indexOf(selectedDate);
   const hasPrevDate = selectedDateIndex > 0;
@@ -204,20 +271,17 @@ export default function TeacherCourseDetail() {
   const goPrevDate = () => { if (hasPrevDate) setSelectedDate(scheduledDateList[selectedDateIndex - 1]); };
   const goNextDate = () => { if (hasNextDate) setSelectedDate(scheduledDateList[selectedDateIndex + 1]); };
 
-  // ✅ 1. แก้ไขให้ระบบจับคู่นักศึกษาได้ถูกต้อง 100%
   const dailyStudentRows = studentList.map(s => {
-    // ค้นหาข้อมูลเช็คชื่อของนักศึกษาคนนี้แบบครอบคลุม
     const record = dailyAttendance.find(a => 
-      a.userId === s.studentUserId ||        // กรณีเทียบ UUID
-      a.studentId === s.studentId ||         // กรณีเทียบรหัส 13 หลัก
-      a.studentCode === s.studentId ||       // กรณี Backend ส่งชื่อคีย์เป็น studentCode
-      a.studentId === s.studentUserId        // กรณี Backend ส่ง UUID มาในช่อง studentId
+      a.userId === s.studentUserId || 
+      a.studentId === s.studentId || 
+      a.studentCode === s.studentId || 
+      a.studentId === s.studentUserId
     );
 
     let currentStatus = record?.status?.toLowerCase() || null;
-    if (currentStatus === 'on_time') currentStatus = 'present'; // จัดการคำให้ตรงกัน
+    if (currentStatus === 'on_time') currentStatus = 'present';
 
-    // ถ้ายังไม่เช็คชื่อ ให้ตรวจสอบว่า "เลยเวลาขาดเรียนหรือยัง"
     if (!currentStatus && courseTimeSettings.absent) {
         const [absentH, absentM] = courseTimeSettings.absent.split(':').map(Number);
         const now = new Date();
@@ -229,15 +293,10 @@ export default function TeacherCourseDetail() {
         }
     }
 
-    // จัดการการแสดงเวลาให้สวยงาม
     let displayTime = '-';
     if (record) {
-      if (record.time) {
-        displayTime = record.time + ' น.';
-      } else if (record.checkedAt) {
-        const d = new Date(record.checkedAt);
-        displayTime = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
-      }
+      if (record.time) displayTime = record.time + ' น.';
+      else if (record.checkedAt) displayTime = new Date(record.checkedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
     }
 
     return {
@@ -247,7 +306,6 @@ export default function TeacherCourseDetail() {
     };
   });
 
-  // ✅ 2. คำนวณสถิติ
   const dailyStats = {
     total: studentList.length,
     present: dailyStudentRows.filter(s => ['present', 'on_time'].includes(s.attendanceStatus)).length,
@@ -256,7 +314,6 @@ export default function TeacherCourseDetail() {
     pending: dailyStudentRows.filter(s => !s.attendanceStatus).length,
   };
 
-  
   const checkedCount = dailyStats.present + dailyStats.late + dailyStats.absent;
   const checkedPercent = dailyStats.total > 0 ? Math.round((checkedCount / dailyStats.total) * 100) : 0;
 
@@ -267,32 +324,6 @@ export default function TeacherCourseDetail() {
     if (dailyFilter === 'pending') return !r.attendanceStatus;
     return true;
   });
-
-
-  // ==========================================
-  // 4. ฟังก์ชันทำงานต่างๆ (Handlers)
-  // ==========================================
-  const handleAddStudent = async () => {
-    if (!addStudentId.trim()) return alert('กรุณากรอกรหัสนักศึกษา');
-    try {
-      setAddingStudent(true);
-      await classService.addStudentToClass(courseId, addStudentId.trim());
-      setAddStudentId('');
-      setShowAddStudentModal(false);
-      await fetchStudents();
-    } catch (error) {
-      alert(error.response?.data?.message || 'เพิ่มนักศึกษาไม่สำเร็จ');
-    } finally { setAddingStudent(false); }
-  };
-
-  const handleDeleteStudent = async () => {
-    if (!studentToDelete) return;
-    try {
-      await classService.removeStudentFromClass(courseId, studentToDelete.studentUserId || studentToDelete.id);
-      setStudentToDelete(null);
-      await fetchStudents();
-    } catch (error) { alert('ลบนักศึกษาไม่สำเร็จ'); }
-  };
 
   const exportDailyCSV = () => {
     const statusLabel = (s) => ['present', 'on_time'].includes(s) ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : 'รอดำเนินการ';
@@ -308,6 +339,115 @@ export default function TeacherCourseDetail() {
     URL.revokeObjectURL(url);
   };
 
+  const handleAddStudent = async () => {
+    if (!addStudentId.trim()) return alert('กรุณากรอกรหัสนักศึกษา');
+    try {
+      setAddingStudent(true);
+      await classService.addStudentToClass(courseId, addStudentId.trim());
+      setAddStudentId('');
+      setShowAddStudentModal(false);
+      await fetchStudents();
+    } catch (error) {
+      alert(error.response?.data?.message || 'เพิ่มนักศึกษาไม่สำเร็จ');
+    } finally { setAddingStudent(false); }
+  };
+
+  // ==========================================
+  // CSV Import handlers
+  // ==========================================
+  const parseCsvText = (rawText) => {
+    const text = rawText
+      .replace(/^\uFEFF/, '')
+      .replace(/\u0000/g, '')
+      .replace(/[^\x20-\x7E\r\n,]/g, ''); 
+
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    const studentIds = [];
+    for (const line of lines) {
+      const matches = line.match(/\d{10,13}/g);
+      if (matches) {
+        studentIds.push(matches[0]);
+      }
+    }
+
+    const unique = [...new Set(studentIds)];
+    return unique;
+  };
+
+  const handleCsvFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvFile(file);
+    setCsvImportResult(null);
+
+    if (file.text) {
+      file.text().then(rawText => {
+        const ids = parseCsvText(rawText);
+        setCsvPreview(ids);
+      }).catch(err => {
+        readWithFileReader(file);
+      });
+    } else {
+      readWithFileReader(file);
+    }
+  };
+
+  const readWithFileReader = (file) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const ids = parseCsvText(event.target.result);
+      setCsvPreview(ids);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvImport = async () => {
+    if (csvPreview.length === 0) return alert('ไม่พบรหัสนักศึกษาในไฟล์ CSV');
+
+    setCsvImporting(true);
+    setCsvImportProgress(0);
+    const results = { success: 0, failed: 0, duplicates: 0, errors: [] };
+
+    for (let i = 0; i < csvPreview.length; i++) {
+      const studentId = csvPreview[i];
+      try {
+        await classService.addStudentToClass(courseId, studentId);
+        results.success++;
+      } catch (error) {
+        const msg = error.response?.data?.message || 'ไม่สำเร็จ';
+        if (error.response?.status === 409) {
+          results.duplicates++;
+        } else {
+          results.failed++;
+        }
+        results.errors.push({ id: studentId, message: msg });
+      }
+      setCsvImportProgress(Math.round(((i + 1) / csvPreview.length) * 100));
+    }
+
+    setCsvImportResult(results);
+    setCsvImporting(false);
+    await fetchStudents();
+  };
+
+  const resetCsvModal = () => {
+    setShowCsvModal(false);
+    setCsvFile(null);
+    setCsvPreview([]);
+    setCsvImportResult(null);
+    setCsvImportProgress(0);
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!studentToDelete) return;
+    try {
+      await classService.removeStudentFromClass(courseId, studentToDelete.studentUserId || studentToDelete.id);
+      setStudentToDelete(null);
+      await fetchStudents();
+    } catch (error) { alert('ลบนักศึกษาไม่สำเร็จ'); }
+  };
+
+  // ✅ แก้ไขให้ส่งค่า lateThresholdMinutes และ endTime กลับไปให้ Spring Boot 
   const handleSaveTimeSettings = async () => {
     try {
       const [startH, startM] = editTimeForm.start.split(':').map(Number);
@@ -325,6 +465,7 @@ export default function TeacherCourseDetail() {
         room: courseInfo.room,
         term: courseInfo.term,
         startTime: editTimeForm.start,
+        endTime: editTimeForm.absent, // เพิ่มบรรทัดนี้ ให้มันส่งค่า absent ไปบันทึกเป็น endTime ใน Database
         lateThresholdMinutes: lateThreshold
       };
 
@@ -415,29 +556,32 @@ export default function TeacherCourseDetail() {
     }
   };
 
-  const handleSendAlertToStudent = () => {
-    setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
-    setShowSendAlertModal(false);
-    setAlertToSend(null);
-    alert('ส่งอีเมลแจ้งเตือนเรียบร้อยแล้ว');
+  const openAlertModal = (alert) => {
+    setAlertToSend(alert);
+    setAiMessage(`เรียน ${alert.studentName},\n\nระบบ FaceCheck ตรวจพบว่าคุณมีสถิติ${alert.issue} ซึ่งอาจส่งผลต่อการประเมินผลการเรียน\n\nโปรดติดต่ออาจารย์ผู้สอนด่วนเพื่อชี้แจงเหตุผล\n\nด้วยความเคารพ\nผู้สอนวิชา ${courseInfo.name}`);
+    setShowSendAlertModal(true);
   };
 
-  const formatThaiDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const handleSendAlertToStudent = async () => {
+    if (!alertToSend || !aiMessage.trim()) return;
+    
+    try {
+      await notificationService.sendAiAlert(alertToSend.studentUserId, aiMessage);
+      
+      setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
+      setShowSendAlertModal(false);
+      setAlertToSend(null);
+      alert('ส่งการแจ้งเตือนเข้าระบบของนักศึกษาเรียบร้อยแล้ว');
+    } catch (error) {
+      alert('ไม่สามารถส่งแจ้งเตือนได้: ' + (error.response?.data?.message || error.message));
+    }
   };
-  const isDatePast = (dateStr) => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    return new Date(dateStr) < today;
-  };
-  const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
 
   const saveDatesToDB = async (datesArray) => {
     try {
       await classService.updateClass(courseId, {
         ...courseInfo,
-        scheduledDatesJson: JSON.stringify(datesArray)
+        scheduledDates: JSON.stringify(datesArray)
       });
     } catch (err) {}
   };
@@ -493,6 +637,7 @@ export default function TeacherCourseDetail() {
     });
     setDateToDelete(null); 
   };
+  
   const handleClearAllDates = () => { 
     if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
       setScheduledDates([]);
@@ -500,62 +645,57 @@ export default function TeacherCourseDetail() {
     } 
   };
 
-  // ==========================================
-  // 5. ส่วนแสดงผล (UI)
-  // ==========================================
   return (
-    <div className="p-8 lg:p-10 animate-in fade-in duration-300">
+    <div className="p-3 sm:p-5 md:p-8 lg:p-10 animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[70vh]">
         
         {/* Header ส่วนบนสีดำ */}
-        <div className="bg-slate-900 text-white p-6 pb-0">
-          <div className="flex items-center space-x-2 text-slate-400 mb-4 cursor-pointer hover:text-white transition w-max" onClick={() => navigate('/teacher/dashboard')}>
-            <ChevronLeft size={18} /> <span className="text-sm font-medium">กลับไปหน้าคลาสของฉัน</span>
+        <div className="bg-slate-900 text-white p-4 sm:p-6 pb-0">
+          <div className="flex items-center space-x-2 text-slate-400 mb-3 sm:mb-4 cursor-pointer hover:text-white transition w-max" onClick={() => navigate('/teacher/dashboard')}>
+            <ChevronLeft size={18} /> <span className="text-xs sm:text-sm font-medium">กลับไปหน้าคลาสของฉัน</span>
           </div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6">
-            <div>
-              <h3 className="text-2xl font-bold mb-1">{courseInfo.code} {courseInfo.name}</h3>
-              <p className="text-slate-400 flex items-center text-sm"><MapPin size={16} className="mr-2"/> ห้อง {courseInfo.room} | {courseTimeSettings.start} - {courseTimeSettings.absent} น.</p>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 sm:mb-6">
+            <div className="min-w-0 w-full md:w-auto">
+              <h3 className="text-lg sm:text-2xl font-bold mb-1 truncate">{courseInfo.code} {courseInfo.name}</h3>
+              <p className="text-slate-400 flex items-center text-xs sm:text-sm"><MapPin size={14} className="mr-1.5 shrink-0"/> <span className="truncate">ห้อง {courseInfo.room} | {courseTimeSettings.start} - {courseTimeSettings.absent} น.</span></p>
             </div>
-            <button onClick={handleStartAttendance} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center mt-4 md:mt-0 shadow-sm border border-purple-500">
-              <Camera size={16} className="mr-2"/> เปิดระบบเช็คชื่อ (แจ้งเตือน นศ.)
+            <button onClick={handleStartAttendance} className="bg-purple-600 hover:bg-purple-500 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center mt-3 md:mt-0 shadow-sm border border-purple-500 w-full md:w-auto justify-center">
+              <Camera size={16} className="mr-2 shrink-0"/> เปิดระบบเช็คชื่อ (แจ้งเตือน นศ.)
             </button>
           </div>
           
           {/* Tabs Menu */}
-          <div className="flex space-x-1 overflow-x-auto pb-0">
+          <div className="flex space-x-1 overflow-x-auto pb-0 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
             {[
               { id: 'info', label: 'ข้อมูลวิชา' },
               { id: 'students', label: 'รายชื่อนักศึกษา' },
               { id: 'daily', label: 'สถิติรายวัน' },
               { id: 'term', label: 'สถิติรายเทอม' },
-              { id: 'alerts', label: 'AI แจ้งเตือนความเสี่ยง', badge: riskAlerts.filter(a => a.status === 'pending').length }
+              { id: 'alerts', label: 'AI แจ้งเตือน', badge: riskAlerts.filter(a => a.status === 'pending').length }
             ].map(tab => (
               <button 
                 key={tab.id}
                 onClick={() => setCourseSubTab(tab.id)} 
-                className={`px-4 py-2.5 font-medium text-sm rounded-t-lg transition flex items-center ${courseSubTab === tab.id ? 'bg-white text-purple-700' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium text-xs sm:text-sm rounded-t-lg transition flex items-center whitespace-nowrap shrink-0 ${courseSubTab === tab.id ? 'bg-white text-purple-700' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
               >
                 {tab.label}
-                {tab.badge > 0 && <span className="ml-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.badge}</span>}
+                {tab.badge > 0 && <span className="ml-1.5 sm:ml-2 bg-red-500 text-white text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full">{tab.badge}</span>}
               </button>
             ))}
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="p-6 md:p-8">
+        <div className="p-4 sm:p-6 md:p-8">
           
           {/* TAB 1: ข้อมูลวิชา */}
           {courseSubTab === 'info' && (
             <div className="space-y-8 animate-in fade-in duration-300">
-              
-              {/* ข้อมูลเบื้องต้น */}
               <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-purple-600"/> ข้อมูลวิชาเบื้องต้น</h4>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-purple-600 shrink-0" size={18}/> ข้อมูลวิชาเบื้องต้น</h4>
                   {!isEditingCourseInfo ? (
-                    <button onClick={() => { setEditCourseForm(courseInfo); setIsEditingCourseInfo(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm flex items-center">
+                    <button onClick={() => { setEditCourseForm(courseInfo); setIsEditingCourseInfo(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center">
                       <Edit size={14} className="mr-1.5"/> แก้ไขข้อมูล
                     </button>
                   ) : (
@@ -606,29 +746,20 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* กำหนดเวลาและวันที่เช็คชื่อ */}
               <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600"/> กำหนดเวลาและวันที่เช็คชื่อ</h4>
-                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm">แก้ไขเวลา</button>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-purple-600 shrink-0" size={18}/> กำหนดเวลาและวันที่เช็คชื่อ</h4>
+                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm w-full sm:w-auto text-center">แก้ไขเวลา</button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div className="border border-green-200 bg-green-50 p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-sm block mb-1">ตรงเวลา (เริ่มคลาส)</span><span className="text-2xl font-bold text-green-800">{courseTimeSettings.start} น.</span></div>
-                  <div className="border border-yellow-200 bg-yellow-50 p-5 rounded-xl shadow-sm"><span className="text-yellow-600 font-bold text-sm block mb-1">สาย (หลังจากเวลา)</span><span className="text-2xl font-bold text-yellow-800">{courseTimeSettings.late} น.</span></div>
-                  <div className="border border-red-200 bg-red-50 p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-sm block mb-1">ขาดเรียน / ปิดสแกน</span><span className="text-2xl font-bold text-red-800">{courseTimeSettings.absent} น.</span></div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
+                  <div className="border border-green-200 bg-green-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-[10px] sm:text-sm block mb-1">ตรงเวลา</span><span className="text-lg sm:text-2xl font-bold text-green-800">{courseTimeSettings.start} <span className="hidden sm:inline">น.</span></span></div>
+                  <div className="border border-yellow-200 bg-yellow-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-yellow-600 font-bold text-[10px] sm:text-sm block mb-1">สาย</span><span className="text-lg sm:text-2xl font-bold text-yellow-800">{courseTimeSettings.late} <span className="hidden sm:inline">น.</span></span></div>
+                  <div className="border border-red-200 bg-red-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-[10px] sm:text-sm block mb-1">ขาดเรียน</span><span className="text-lg sm:text-2xl font-bold text-red-800">{courseTimeSettings.absent} <span className="hidden sm:inline">น.</span></span></div>
                 </div>
 
-                {/* สถานะสแกน real-time */}
-                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-5 ${scanStatus.isOpen ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
-                  <div className={`w-2.5 h-2.5 rounded-full ${scanStatus.isOpen ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-400'}`}></div>
-                  <Clock size={14} />
-                  <span>{scanStatus.label}</span>
-                </div>
-
-                {/* วันที่มีเช็คชื่อ */}
                 <div className="border-t border-slate-100 pt-5">
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-5 md:p-6 shadow-sm">
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5">
                       <div>
                         <p className="text-[15px] font-bold text-slate-700 flex items-center">
@@ -660,18 +791,18 @@ export default function TeacherCourseDetail() {
                       </div>
                     ) : (
                       <div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-                          <div className="bg-white border border-indigo-100 rounded-2xl px-5 py-4 text-center shadow-sm">
-                            <p className="text-3xl font-extrabold text-indigo-700 leading-none">{scheduledDates.filter(d => !isDatePast(d.date)).length}</p>
-                            <p className="text-xs font-bold text-indigo-500 mt-2 uppercase tracking-wide">วันที่เหลือ</p>
+                        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
+                          <div className="bg-white border border-indigo-100 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
+                            <p className="text-2xl sm:text-3xl font-extrabold text-indigo-700 leading-none">{scheduledDates.filter(d => !isDatePast(d.date)).length}</p>
+                            <p className="text-[10px] sm:text-xs font-bold text-indigo-500 mt-1.5 sm:mt-2 uppercase tracking-wide">วันที่เหลือ</p>
                           </div>
-                          <div className="bg-white border border-emerald-100 rounded-2xl px-5 py-4 text-center shadow-sm">
-                            <p className="text-3xl font-extrabold text-emerald-700 leading-none">{scheduledDates.filter(d => isDatePast(d.date)).length}</p>
-                            <p className="text-xs font-bold text-emerald-500 mt-2 uppercase tracking-wide">ผ่านไปแล้ว</p>
+                          <div className="bg-white border border-emerald-100 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
+                            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 leading-none">{scheduledDates.filter(d => isDatePast(d.date)).length}</p>
+                            <p className="text-[10px] sm:text-xs font-bold text-emerald-500 mt-1.5 sm:mt-2 uppercase tracking-wide">ผ่านไปแล้ว</p>
                           </div>
-                          <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 text-center shadow-sm">
-                            <p className="text-3xl font-extrabold text-slate-700 leading-none">{scheduledDates.length}</p>
-                            <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-wide">ทั้งหมด</p>
+                          <div className="bg-white border border-slate-200 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
+                            <p className="text-2xl sm:text-3xl font-extrabold text-slate-700 leading-none">{scheduledDates.length}</p>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1.5 sm:mt-2 uppercase tracking-wide">ทั้งหมด</p>
                           </div>
                         </div>
 
@@ -680,22 +811,24 @@ export default function TeacherCourseDetail() {
                             const past = isDatePast(item.date);
                             const today = isDateToday(item.date);
                             return (
-                              <div key={item.id} className={`flex items-center justify-between px-5 py-4 rounded-xl border shadow-sm transition-all ${today ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200' : past ? 'bg-white border-slate-200 opacity-55' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
-                                <div className="flex items-center gap-4">
-                                  <span className={`text-xs font-bold w-7 text-center ${past ? 'text-slate-400' : 'text-slate-500'}`}>{idx + 1}</span>
-                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${today ? 'bg-indigo-600 text-white' : past ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
-                                    <Calendar size={16} />
+                              <div key={item.id} className={`flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 rounded-xl border shadow-sm transition-all ${today ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200' : past ? 'bg-white border-slate-200 opacity-55' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
+                                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                                  <span className={`text-xs font-bold w-5 sm:w-7 text-center shrink-0 ${past ? 'text-slate-400' : 'text-slate-500'}`}>{idx + 1}</span>
+                                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${today ? 'bg-indigo-600 text-white' : past ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
+                                    <Calendar size={14} className="sm:hidden" />
+                                    <Calendar size={16} className="hidden sm:block" />
                                   </div>
-                                  <div>
-                                    <p className={`font-bold text-[15px] ${today ? 'text-indigo-800' : past ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+                                  <div className="min-w-0">
+                                    <p className={`font-bold text-sm sm:text-[15px] truncate ${today ? 'text-indigo-800' : past ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
                                       {formatThaiDate(item.date)}
-                                      {today && <span className="ml-2 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">วันนี้</span>}
+                                      {today && <span className="ml-1.5 sm:ml-2 text-[10px] bg-indigo-600 text-white px-1.5 sm:px-2 py-0.5 rounded-full font-bold animate-pulse">วันนี้</span>}
                                     </p>
-                                    <p className="text-xs text-slate-500 mt-1">{item.note || (item.auto ? 'สร้างอัตโนมัติจากตารางเรียน' : 'เพิ่มเองแบบกำหนดวันพิเศษ')}</p>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">{item.note || (item.auto ? 'สร้างอัตโนมัติ' : 'เพิ่มเอง')}</p>
                                   </div>
                                 </div>
-                                <button onClick={() => setDateToDelete(item)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ลบวัน">
-                                  <Trash2 size={16} />
+                                <button onClick={() => setDateToDelete(item)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition shrink-0 ml-2" title="ลบวัน">
+                                  <Trash2 size={14} className="sm:hidden" />
+                                  <Trash2 size={16} className="hidden sm:block" />
                                 </button>
                               </div>
                             );
@@ -707,37 +840,36 @@ export default function TeacherCourseDetail() {
                 </div>
               </div>
 
-              {/* ตั้งค่าพิกัด */}
               <div className="pt-4 border-t border-slate-100">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-blue-600"/> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
-                  <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm flex items-center"><Target size={14} className="mr-1.5"/> ตั้งค่าพิกัด</button>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-blue-600 shrink-0" size={18}/> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
+                  <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center"><Target size={14} className="mr-1.5"/> ตั้งค่าพิกัด</button>
                 </div>
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-6 items-center shadow-sm">
-                   <div className="w-full md:w-1/3 bg-slate-200 h-32 rounded-xl flex items-center justify-center relative overflow-hidden shadow-inner border border-slate-300">
+                <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 sm:gap-6 items-center shadow-sm">
+                   <div className="w-full md:w-1/3 bg-slate-200 h-24 sm:h-32 rounded-xl flex items-center justify-center relative overflow-hidden shadow-inner border border-slate-300">
                       <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-300"></div>
                       <div className="relative flex items-center justify-center">
-                        <div className="absolute w-16 h-16 bg-blue-500/20 rounded-full animate-ping"></div>
-                        <div className="absolute w-8 h-8 bg-blue-500/40 rounded-full"></div>
-                        <MapPin size={24} className="text-blue-600 relative z-10 fill-white" />
+                        <div className="absolute w-12 sm:w-16 h-12 sm:h-16 bg-blue-500/20 rounded-full animate-ping"></div>
+                        <div className="absolute w-6 sm:w-8 h-6 sm:h-8 bg-blue-500/40 rounded-full"></div>
+                        <MapPin size={20} className="sm:hidden text-blue-600 relative z-10 fill-white" />
+                        <MapPin size={24} className="hidden sm:block text-blue-600 relative z-10 fill-white" />
                       </div>
                    </div>
-                   <div className="w-full md:w-2/3 space-y-4">
-                      <div><span className="text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span><p className="font-bold text-slate-800 text-lg mt-0.5">{locationSettings.name}</p></div>
-                      <div className="flex flex-wrap gap-x-8 gap-y-3">
-                        <div><span className="text-xs text-slate-500 font-bold uppercase tracking-wide">พิกัด (Lat, Lng)</span><p className="font-medium text-slate-700 mt-0.5">{locationSettings.lat}, {locationSettings.lng}</p></div>
-                        <div><span className="text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-blue-600 bg-blue-100 px-2.5 py-0.5 rounded-md mt-0.5 inline-block">รัศมี {locationSettings.radius} เมตร</p></div>
+                   <div className="w-full md:w-2/3 space-y-3 sm:space-y-4">
+                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span><p className="font-bold text-slate-800 text-base sm:text-lg mt-0.5">{locationSettings.name}</p></div>
+                      <div className="flex flex-col sm:flex-row flex-wrap gap-x-8 gap-y-2 sm:gap-y-3">
+                        <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">พิกัด (Lat, Lng)</span><p className="font-medium text-slate-700 mt-0.5 text-sm sm:text-base">{locationSettings.lat}, {locationSettings.lng}</p></div>
+                        <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-blue-600 bg-blue-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
                       </div>
                    </div>
                 </div>
               </div>
 
-              {/* ยกคลาสเรียน */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center"><AlertTriangle className="mr-2 text-rose-500"/> จัดการสถานะคลาสเรียน</h4>
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><AlertTriangle className="mr-2 text-rose-500 shrink-0" size={18}/> จัดการสถานะคลาสเรียน</h4>
                 </div>
-                <div className={`border rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all shadow-sm ${isClassCanceled ? 'bg-slate-50 border-slate-200' : 'bg-rose-50/50 border-rose-200'}`}>
+                <div className={`border rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all shadow-sm ${isClassCanceled ? 'bg-slate-50 border-slate-200' : 'bg-rose-50/50 border-rose-200'}`}>
                   <div>
                     <h5 className={`font-bold mb-1 ${isClassCanceled ? 'text-slate-700' : 'text-rose-800'}`}>{isClassCanceled ? 'คลาสเรียนวันนี้ถูกยกเลิกแล้ว' : 'ยกเลิกคลาสเรียน (Cancel Class)'}</h5>
                     <p className={`text-sm font-medium ${isClassCanceled ? 'text-slate-500' : 'text-rose-600/80'}`}>ปิดการสแกนใบหน้าสำหรับวันนี้ และส่งแจ้งเตือนไปยังนักศึกษาทั้งหมดทันที</p>
@@ -755,10 +887,11 @@ export default function TeacherCourseDetail() {
           {/* TAB 2: รายชื่อนักศึกษา */}
           {courseSubTab === 'students' && (
             <div className="animate-in fade-in duration-300">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div><h4 className="font-bold text-slate-800 text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
-                <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
-                  <button onClick={() => { setAddStudentId(''); setShowAddStudentModal(true); }} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0">+ เพิ่มรายชื่อ</button>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
+                <div><h4 className="font-bold text-slate-800 text-base sm:text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-xs sm:text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <button onClick={() => { setAddStudentId(''); setShowAddStudentModal(true); }} className="text-sm bg-purple-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-purple-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Plus size={15}/> เพิ่มรายชื่อ</button>
+                  <button onClick={() => { resetCsvModal(); setShowCsvModal(true); }} className="text-sm bg-emerald-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Upload size={15}/> นำเข้า CSV</button>
                 </div>
               </div>
               
@@ -769,22 +902,22 @@ export default function TeacherCourseDetail() {
                   <p className="text-slate-400 text-sm mt-1">กดปุ่ม "+ เพิ่มรายชื่อ" เพื่อเพิ่มนักศึกษา</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto border border-slate-200 rounded-xl -mx-4 sm:mx-0">
+                  <table className="w-full text-left text-sm min-w-[400px]">
                     <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
-                        <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
-                        <th className="py-3 px-4 font-semibold text-center w-24">จัดการ</th>
+                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-32 sm:w-40 text-xs sm:text-sm">รหัสนักศึกษา</th>
+                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-xs sm:text-sm">ชื่อ-สกุล</th>
+                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center w-16 sm:w-24 text-xs sm:text-sm">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {studentList.map(student => (
                         <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 text-slate-600 font-mono text-xs">{student.studentId || '-'}</td>
-                          <td className="py-3 px-4 text-slate-800 font-medium">{student.name}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button onClick={() => setStudentToDelete(student)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ลบรายชื่อนศ."><Trash2 size={16}/></button>
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-600 font-mono text-[11px] sm:text-xs">{student.studentId || '-'}</td>
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-800 font-medium text-xs sm:text-sm">{student.name}</td>
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center">
+                            <button onClick={() => setStudentToDelete(student)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition" title="ลบรายชื่อนศ."><Trash2 size={14} className="sm:hidden"/><Trash2 size={16} className="hidden sm:block"/></button>
                           </td>
                         </tr>
                       ))}
@@ -799,14 +932,14 @@ export default function TeacherCourseDetail() {
           {courseSubTab === 'daily' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               {scheduledDates.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-                  <Calendar size={40} className="mx-auto text-slate-300 mb-4" />
-                  <p className="font-bold text-slate-600 text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
-                  <p className="text-slate-500 text-sm mt-2">ไปที่ Tab <span className="font-bold text-purple-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
-                  <button onClick={() => setCourseSubTab('info')} className="mt-5 bg-purple-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
+                <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-12 text-center">
+                  <Calendar size={36} className="mx-auto text-slate-300 mb-3 sm:mb-4" />
+                  <p className="font-bold text-slate-600 text-base sm:text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-2">ไปที่ Tab <span className="font-bold text-purple-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
+                  <button onClick={() => setCourseSubTab('info')} className="mt-4 sm:mt-5 bg-purple-600 text-white font-bold px-5 sm:px-6 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
                 </div>
               ) : (<>
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+              <div className="bg-slate-50 p-3 sm:p-5 rounded-xl border border-slate-200">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                   <div>
                     <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
@@ -825,17 +958,18 @@ export default function TeacherCourseDetail() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-200">
-                  <button onClick={goPrevDate} disabled={!hasPrevDate} className={`p-2 rounded-lg border transition ${hasPrevDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronLeft size={18} /></button>
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-xl px-5 py-2.5 shadow-sm">
-                      <Calendar size={16} className="text-indigo-500" />
-                      <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer pr-2">
+                <div className="flex items-center gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200">
+                  <button onClick={goPrevDate} disabled={!hasPrevDate} className={`p-1.5 sm:p-2 rounded-lg border transition shrink-0 ${hasPrevDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronLeft size={16} className="sm:hidden" /><ChevronLeft size={18} className="hidden sm:block" /></button>
+                  <div className="flex-1 flex items-center justify-center min-w-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 bg-white border border-indigo-200 rounded-xl px-2.5 sm:px-5 py-2 sm:py-2.5 shadow-sm w-full max-w-xs sm:max-w-none sm:w-auto">
+                      <Calendar size={14} className="text-indigo-500 shrink-0 sm:hidden" />
+                      <Calendar size={16} className="text-indigo-500 shrink-0 hidden sm:block" />
+                      <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-xs sm:text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer pr-1 sm:pr-2 w-full sm:w-auto">
                         {scheduledDateList.map((d, i) => <option key={d} value={d}>{formatThaiDate(d)}{d === todayStr ? ' (วันนี้)' : ''} — ครั้งที่ {i + 1}</option>)}
                       </select>
                     </div>
                   </div>
-                  <button onClick={goNextDate} disabled={!hasNextDate} className={`p-2 rounded-lg border transition ${hasNextDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronRight size={18} /></button>
+                  <button onClick={goNextDate} disabled={!hasNextDate} className={`p-1.5 sm:p-2 rounded-lg border transition shrink-0 ${hasNextDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronRight size={16} className="sm:hidden" /><ChevronRight size={18} className="hidden sm:block" /></button>
                 </div>
               </div>
 
@@ -850,11 +984,11 @@ export default function TeacherCourseDetail() {
                     {dailyStats.late > 0 && <div className="bg-yellow-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.late / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.late}</span></div>}
                     {dailyStats.absent > 0 && <div className="bg-red-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.absent / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.absent}</span></div>}
                   </div>
-                  <div className="flex items-center gap-5 mt-2.5 text-xs font-medium text-slate-500">
-                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded"></div> ตรงเวลา ({dailyStats.present})</span>
-                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-yellow-400 rounded"></div> สาย ({dailyStats.late})</span>
-                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-400 rounded"></div> ขาดเรียน ({dailyStats.absent})</span>
-                    <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded border border-slate-300"></div> รอดำเนินการ ({dailyStats.pending})</span>
+                  <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-2.5 text-[10px] sm:text-xs font-medium text-slate-500">
+                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded"></div> ตรงเวลา ({dailyStats.present})</span>
+                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-400 rounded"></div> สาย ({dailyStats.late})</span>
+                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-400 rounded"></div> ขาดเรียน ({dailyStats.absent})</span>
+                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-slate-200 rounded border border-slate-300"></div> รอ ({dailyStats.pending})</span>
                   </div>
                 </div>
               )}
@@ -864,11 +998,11 @@ export default function TeacherCourseDetail() {
                   {[1,2,3,4].map(i => <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 text-center animate-pulse"><div className="h-3 w-20 bg-slate-100 rounded mx-auto mb-3"></div><div className="h-8 w-12 bg-slate-100 rounded mx-auto"></div></div>)}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold uppercase mb-1">นักศึกษาทั้งหมด</p><p className="text-3xl font-bold text-slate-800">{dailyStats.total}</p></div>
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-3xl font-bold text-green-600">{dailyStats.present}</p></div>
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-3xl font-bold text-yellow-600">{dailyStats.late}</p></div>
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-3xl font-bold text-red-500">{dailyStats.absent}</p></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+                  <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ทั้งหมด</p><p className="text-2xl sm:text-3xl font-bold text-slate-800">{dailyStats.total}</p></div>
+                  <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-[10px] sm:text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-2xl sm:text-3xl font-bold text-green-600">{dailyStats.present}</p></div>
+                  <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-[10px] sm:text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-2xl sm:text-3xl font-bold text-yellow-600">{dailyStats.late}</p></div>
+                  <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-2xl sm:text-3xl font-bold text-red-500">{dailyStats.absent}</p></div>
                 </div>
               )}
 
@@ -893,25 +1027,25 @@ export default function TeacherCourseDetail() {
                     ))}
                   </div>
 
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-sm">
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl -mx-4 sm:mx-0">
+                    <table className="w-full text-left text-sm min-w-[520px]">
                       <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="py-3 px-4 font-semibold w-16 text-center">#</th>
-                          <th className="py-3 px-4 font-semibold w-40">รหัสนักศึกษา</th>
-                          <th className="py-3 px-4 font-semibold">ชื่อ-สกุล</th>
-                          <th className="py-3 px-4 font-semibold text-center">เวลาเช็คชื่อ</th>
-                          <th className="py-3 px-4 font-semibold text-center">สถานะ</th>
+                          <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-10 sm:w-16 text-center text-xs sm:text-sm">#</th>
+                          <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-32 sm:w-40 text-xs sm:text-sm">รหัส นศ.</th>
+                          <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-xs sm:text-sm">ชื่อ-สกุล</th>
+                          <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center text-xs sm:text-sm">เวลา</th>
+                          <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center text-xs sm:text-sm">สถานะ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredDailyRows.map((row, idx) => (
                           <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-3 px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
-                            <td className="py-3 px-4 text-slate-600 font-mono text-xs">{row.studentId || '-'}</td>
-                            <td className="py-3 px-4 text-slate-800 font-medium">{row.name}</td>
-                            <td className="py-3 px-4 text-center text-slate-600 text-sm font-medium">{row.checkedTime}</td>
-                            <td className="py-3 px-4 text-center"><StatusBadge status={row.attendanceStatus} /></td>
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-600 font-mono text-[11px] sm:text-xs">{row.studentId || '-'}</td>
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-800 font-medium text-xs sm:text-sm">{row.name}</td>
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center text-slate-600 text-xs sm:text-sm font-medium">{row.checkedTime}</td>
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center"><StatusBadge status={row.attendanceStatus} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -927,37 +1061,73 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-6 shadow-sm relative overflow-hidden group">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
-                <div className="flex items-center justify-between mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
-                  <div className="flex items-center space-x-3"><div className="bg-white p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100"><Sparkles size={22} className="fill-indigo-50" /></div><h4 className="text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
-                  <span className="flex items-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-md"><Brain size={14} className="mr-1.5"/> วิเคราะห์โดย AI</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
+                  <div className="flex items-center space-x-2 sm:space-x-3"><div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0"><Sparkles size={18} className="sm:hidden fill-indigo-50" /><Sparkles size={22} className="hidden sm:block fill-indigo-50" /></div><h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
+                  <span className="flex items-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] sm:text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full shadow-md self-start sm:self-auto shrink-0"><Brain size={12} className="mr-1 sm:hidden"/><Brain size={14} className="mr-1.5 hidden sm:block"/> วิเคราะห์โดย AI</span>
                 </div>
-                <p className="text-indigo-900/80 text-[15px] relative z-10 leading-relaxed font-medium">นักศึกษามีความรับผิดชอบในเกณฑ์ <span className="font-extrabold text-emerald-600 bg-white px-3 py-1 rounded-lg shadow-sm border border-emerald-100 mx-1">ดีเยี่ยม</span> ค่าเฉลี่ยการเข้าเรียนตรงเวลาตลอดเทอมอยู่ที่ 88%</p>
+                {loadingTerm ? (
+                  <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังวิเคราะห์ข้อมูลการเข้าเรียน...</p>
+                ) : (
+                  <p className="text-indigo-900/80 text-sm sm:text-[15px] relative z-10 leading-relaxed font-medium">
+                    นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg shadow-sm border mx-1 text-sm sm:text-base ${termColor}`}>{termGrade}</span> ค่าเฉลี่ยการเข้าเรียนตลอดเทอมอยู่ที่ {avgAttendance}%
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-purple-600"/> แนวโน้มการเข้าเรียน</h4>
-                  <div className="flex items-end justify-between h-40 px-2 border-b border-slate-100 pb-2">
-                    {[85, 88, 92, 70, 89, 95].map((val, idx) => (
-                      <div key={idx} className="flex flex-col items-center w-1/6">
-                        <div className="w-full flex justify-center items-end h-32 relative"><div className="w-8 bg-slate-100 rounded-t-md absolute bottom-0 h-full"></div><div className={`w-8 rounded-t-md absolute bottom-0 transition-all ${idx === 3 ? 'bg-red-400' : 'bg-purple-500'}`} style={{height: `${val}%`}}></div></div>
-                        <span className={`text-xs mt-2 ${idx === 3 ? 'font-bold text-red-500' : 'text-slate-500'}`}>W{idx+1}</span>
-                      </div>
-                    ))}
-                  </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-purple-600"/> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
+                  {loadingTerm ? (
+                    <p className="text-sm text-slate-500 mt-4">กำลังโหลดข้อมูล...</p>
+                  ) : (
+                    <div className="space-y-4 mt-4">
+                      {termStats.filter(s => s.absentCount > 0).sort((a,b)=>b.absentCount-a.absentCount).slice(0, 5).map((s, idx) => (
+                        <div key={s.id} className="flex justify-between items-center border-b border-slate-50 pb-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-slate-400 font-bold w-4">{idx + 1}.</span>
+                            <div>
+                                <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                                <p className="text-xs text-slate-500">{s.studentId}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                             <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded block mb-1">ขาดเรียนสะสม {s.absentCount} ครั้ง</span>
+                             <span className="text-slate-500 text-[10px]">อัตราเข้าเรียน {s.attendancePercent}%</span>
+                          </div>
+                        </div>
+                      ))}
+                      {termStats.filter(s => s.absentCount > 0).length === 0 && (
+                        <div className="text-center py-6">
+                          <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2"/>
+                          <p className="text-slate-600 font-bold">ไม่มีนักศึกษาที่ขาดเรียนเลย 🎉</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังขาดเรียนสูงสุด</h4>
+                <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังกลุ่มเสี่ยง (AI Alert)</h4>
                   <div className="space-y-4">
-                    {studentList.filter(s => s.absentCount > 0).sort((a,b)=>b.absentCount-a.absentCount).map(s => (
-                      <div key={s.id} className="flex justify-between items-center border-b border-slate-50 pb-2">
-                        <div><p className="text-sm font-bold text-slate-800">{s.name}</p><p className="text-xs text-slate-500">{s.id}</p></div>
-                        <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded">ขาด {s.absentCount} ครั้ง</span>
+                    {loadingTerm ? (
+                      <p className="text-sm text-slate-500 mt-4">กำลังวิเคราะห์ความเสี่ยง...</p>
+                    ) : riskAlerts.length === 0 ? (
+                      <div className="text-center py-6 text-emerald-500 font-bold bg-emerald-50 rounded-lg">
+                        <CheckCircle size={24} className="mx-auto mb-2"/> ไม่มีกลุ่มเสี่ยง
                       </div>
-                    ))}
+                    ) : (
+                      riskAlerts.slice(0, 4).map(alert => (
+                        <div key={alert.id} className="flex justify-between items-start border-b border-slate-50 pb-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{alert.studentName}</p>
+                            <p className="text-[11px] text-red-500 mt-0.5">{alert.issue}</p>
+                          </div>
+                          <button onClick={() => setCourseSubTab('alerts')} className="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-200 transition whitespace-nowrap ml-2">จัดการ</button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -967,24 +1137,45 @@ export default function TeacherCourseDetail() {
           {/* TAB 5: AI แจ้งเตือนความเสี่ยง */}
           {courseSubTab === 'alerts' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-4">
-                <h4 className="text-xl font-bold text-slate-800 flex items-center"><Brain className="mr-2 text-purple-600" size={24} /> AI วิเคราะห์ความเสี่ยง</h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-4">
+                <h4 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center"><Brain className="mr-2 text-purple-600 shrink-0" size={20} /> AI วิเคราะห์ความเสี่ยง</h4>
+                <p className="text-xs sm:text-sm text-slate-500">แจ้งเตือนอัตโนมัติเมื่อขาดเรียนเกิน 20% หรือ 3 ครั้ง</p>
               </div>
-              {riskAlerts.length === 0 ? (
-                <div className="bg-white p-8 rounded-xl border border-slate-200 text-center shadow-sm"><CheckCircle size={32} className="mx-auto text-green-400 mb-3" /><p className="font-bold text-slate-800">ไม่มีการแจ้งเตือนความเสี่ยง</p></div>
+              {loadingTerm ? (
+                 <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
+                   <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-4"></div>
+                   <p className="text-purple-600 font-bold">AI กำลังวิเคราะห์และตรวจสอบเงื่อนไขความเสี่ยง...</p>
+                 </div>
+              ) : riskAlerts.length === 0 ? (
+                <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
+                  <CheckCircle size={40} className="mx-auto text-emerald-400 mb-4" />
+                  <p className="font-bold text-slate-800 text-lg">ไม่มีนักศึกษาในกลุ่มเสี่ยงหมดสิทธิ์สอบ</p>
+                  <p className="text-sm text-slate-500 mt-2">นักศึกษาทุกคนมีความรับผิดชอบในการเข้าเรียนอยู่ในเกณฑ์ที่น่าพอใจ</p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {riskAlerts.map(alert => (
                     <div key={alert.id} className="bg-red-50 p-5 rounded-xl border border-red-100 shadow-sm relative group transition-all hover:shadow-md">
-                      <div className="flex items-start mb-4"><div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div><div><h5 className="font-bold text-red-800 mb-1">แจ้งเตือนความเสี่ยงสูง</h5><p className="text-sm text-red-700">พบนักศึกษาเสี่ยงหมดสิทธิ์สอบ 1 ราย <span className="font-bold">{alert.studentName}</span> {alert.issue}</p></div></div>
-                      <div className="flex items-center">
+                      <div className="flex items-start mb-4">
+                        <div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div>
+                        <div>
+                          <h5 className="font-bold text-red-800 mb-1">ความเสี่ยงหมดสิทธิ์สอบ</h5>
+                          <p className="text-sm text-red-700">
+                            <span className="font-bold text-base block my-1">{alert.studentName}</span> 
+                            {alert.issue}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center mt-4">
                         {alert.status === 'pending' ? (
-                          <button onClick={() => { setAlertToSend(alert); setShowSendAlertModal(true); }} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center"><Sparkles size={14} className="mr-1.5 text-amber-500" /> ร่างอีเมลแจ้งเตือน</button>
+                          <button onClick={() => openAlertModal(alert)} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center w-full justify-center"><Sparkles size={14} className="mr-1.5 text-amber-500" /> ร่างข้อความแจ้งเตือนเข้าแอป</button>
                         ) : (
-                          <span className="text-sm bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center"><CheckCircle size={16} className="mr-1.5"/> ส่งสำเร็จ</span>
+                          <span className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg font-bold flex items-center w-full justify-center"><CheckCircle size={16} className="mr-1.5"/> ส่งแจ้งเตือนเข้าระบบสำเร็จแล้ว</span>
                         )}
                       </div>
-                      <div className="absolute top-4 right-4"><button onClick={() => setAlertToDelete(alert)} className="text-red-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-100 rounded-lg"><Trash2 size={18} /></button></div>
+                      <div className="absolute top-4 right-4">
+                        <button onClick={() => setAlertToDelete(alert)} className="text-red-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-100 rounded-lg" title="ลบการแจ้งเตือน"><Trash2 size={18} /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -994,25 +1185,22 @@ export default function TeacherCourseDetail() {
         </div>
       </div>
 
-      {/* --- Modals ส่วนของอาจารย์ --- */}
-
-      {/* Modal Set Time */}
+      {/* --- Modals --- */}
       {showSetTimeModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Clock className="mr-2 text-purple-600" size={20}/> กำหนดเวลา</h3>
             <div className="space-y-3 mb-6">
-              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({...editTimeForm, start: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
-              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
-              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({...editTimeForm, start: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({...editTimeForm, late: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
+              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน (หลังจากเวลา / เลิกคลาส)</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({...editTimeForm, absent: e.target.value})} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500" /></div>
             </div>
             <button onClick={handleSaveTimeSettings} className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 shadow-md">บันทึกเวลาเช็คชื่อ</button>
           </div>
         </div>
       )}
 
-      {/* Modal Set Location */}
       {showSetLocationModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
@@ -1041,25 +1229,27 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal Send AI Alert */}
       {showSendAlertModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
             <button onClick={() => setShowSendAlertModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24}/></button>
-            <div className="flex items-center space-x-2 mb-4 text-purple-700"><Brain size={24} /><h3 className="text-xl font-bold">ร่างข้อความโดย AI</h3></div>
+            <div className="flex items-center space-x-2 mb-4 text-purple-700"><Brain size={24} /><h3 className="text-xl font-bold">ส่งแจ้งเตือนเข้าระบบนักศึกษา</h3></div>
             <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
               <div className="mb-2 text-sm"><span className="font-bold">ถึง:</span> {alertToSend?.studentName}</div>
-              <textarea className="w-full h-32 bg-white border border-slate-200 p-2 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-purple-500" defaultValue={`เรียน ${alertToSend?.studentName},\n\nพบว่าคุณมีสถิติ${alertToSend?.issue} โปรดติดต่ออาจารย์ผู้สอนด่วน\n\nFaceCheck`}></textarea>
+              <textarea 
+                className="w-full h-32 bg-white border border-slate-200 p-2 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-purple-500" 
+                value={aiMessage}
+                onChange={(e) => setAiMessage(e.target.value)}
+              ></textarea>
             </div>
             <div className="flex space-x-3">
               <button onClick={() => setShowSendAlertModal(false)} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-50">ยกเลิก</button>
-              <button onClick={handleSendAlertToStudent} className="flex-1 bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700"><Mail size={16} className="inline mr-2"/> ส่งการแจ้งเตือน</button>
+              <button onClick={handleSendAlertToStudent} className="flex-1 bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700"><Mail size={16} className="inline mr-2"/> ยืนยันการส่ง</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Confirm ยกคลาสเรียน */}
       {showCancelClassConfirm && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
@@ -1074,7 +1264,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal เพิ่มนักศึกษา */}
       {showAddStudentModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
@@ -1092,7 +1281,137 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal ยืนยันลบนักศึกษา */}
+      {/* CSV Import Modal */}
+      {showCsvModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-xl relative animate-in zoom-in-95">
+            <button onClick={resetCsvModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 sm:p-6">
+              <h3 className="text-lg font-bold text-white flex items-center"><FileUp size={22} className="mr-2"/> นำเข้ารายชื่อจากไฟล์ CSV</h3>
+              <p className="text-emerald-100 text-sm mt-1">อัปโหลดไฟล์ CSV ที่มีรหัสนักศึกษา ระบบจะเพิ่มเข้าคลาสให้อัตโนมัติ</p>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              {/* File Upload Area */}
+              {!csvImportResult && (
+                <>
+                  <label className="block cursor-pointer mb-5">
+                    <div className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all ${csvFile ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                      {csvFile ? (
+                        <div>
+                          <CheckCircle2 size={36} className="mx-auto text-emerald-500 mb-2" />
+                          <p className="font-bold text-emerald-700 text-sm">{csvFile.name}</p>
+                          <p className="text-emerald-600 text-xs mt-1">พบรหัสนักศึกษา {csvPreview.length} รายการ</p>
+                          <p className="text-slate-400 text-xs mt-2">คลิกเพื่อเลือกไฟล์ใหม่</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <Upload size={36} className="mx-auto text-slate-300 mb-3" />
+                          <p className="font-bold text-slate-600 text-sm">คลิกเพื่อเลือกไฟล์ CSV</p>
+                          <p className="text-slate-400 text-xs mt-1.5">หรือลากไฟล์มาวางที่นี่</p>
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" accept=".csv,.txt" onChange={handleCsvFileChange} className="hidden" />
+                  </label>
+
+                  {/* Format Guide */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5">
+                    <p className="text-xs font-bold text-slate-700 mb-2 flex items-center"><FileText size={14} className="mr-1.5 text-slate-500"/> รูปแบบไฟล์ที่รองรับ</p>
+                    <div className="bg-white rounded-lg p-3 border border-slate-100 font-mono text-xs text-slate-600 space-y-0.5">
+                      <p className="text-slate-400"># ตัวอย่าง CSV (1 คอลัมน์)</p>
+                      <p>2310511010001</p>
+                      <p>2310511010002</p>
+                      <p className="text-slate-400 mt-2"># หรือหลายคอลัมน์ (ระบบจะดึงรหัสอัตโนมัติ)</p>
+                      <p>2310511010001, สมชาย ใจดี</p>
+                      <p>2310511010002, สมหญิง รักเรียน</p>
+                    </div>
+                  </div>
+
+                  {/* Preview List */}
+                  {csvPreview.length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-xs font-bold text-slate-700 mb-2">ตัวอย่างรหัสที่จะนำเข้า (แสดง {Math.min(csvPreview.length, 5)} จาก {csvPreview.length} รายการ)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {csvPreview.slice(0, 5).map((id, i) => (
+                          <span key={i} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-mono px-2.5 py-1 rounded-lg">{id}</span>
+                        ))}
+                        {csvPreview.length > 5 && <span className="bg-slate-100 text-slate-500 text-xs px-2.5 py-1 rounded-lg font-medium">+{csvPreview.length - 5} รายการ</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progress Bar */}
+                  {csvImporting && (
+                    <div className="mb-5">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-sm font-bold text-slate-700 flex items-center"><Loader2 size={14} className="mr-1.5 animate-spin"/> กำลังนำเข้า...</p>
+                        <p className="text-sm font-bold text-emerald-600">{csvImportProgress}%</p>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300" style={{ width: `${csvImportProgress}%` }}></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button onClick={resetCsvModal} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
+                    <button 
+                      onClick={handleCsvImport} 
+                      disabled={csvPreview.length === 0 || csvImporting} 
+                      className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {csvImporting ? <><Loader2 size={16} className="animate-spin"/> กำลังนำเข้า...</> : <><Upload size={16}/> นำเข้า {csvPreview.length > 0 ? `(${csvPreview.length} คน)` : ''}</>}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Import Results */}
+              {csvImportResult && (
+                <div>
+                  <div className="text-center mb-5">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 ${csvImportResult.failed > 0 ? 'bg-yellow-50' : 'bg-emerald-50'}`}>
+                      {csvImportResult.failed > 0 ? <AlertCircle size={32} className="text-yellow-500" /> : <CheckCircle2 size={32} className="text-emerald-500" />}
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-800">นำเข้าเสร็จสิ้น!</h4>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">{csvImportResult.success}</p>
+                      <p className="text-xs font-bold text-emerald-600 mt-1">สำเร็จ</p>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-yellow-700">{csvImportResult.duplicates}</p>
+                      <p className="text-xs font-bold text-yellow-600 mt-1">ซ้ำ</p>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-red-600">{csvImportResult.failed}</p>
+                      <p className="text-xs font-bold text-red-500 mt-1">ไม่สำเร็จ</p>
+                    </div>
+                  </div>
+
+                  {csvImportResult.errors.length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 max-h-32 overflow-y-auto">
+                      <p className="text-xs font-bold text-slate-600 mb-2">รายละเอียด:</p>
+                      {csvImportResult.errors.map((err, i) => (
+                        <p key={i} className="text-xs text-slate-500 py-0.5"><span className="font-mono text-slate-700">{err.id}</span> — {err.message}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  <button onClick={resetCsvModal} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md">เสร็จสิ้น</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {studentToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">
@@ -1108,7 +1427,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal สร้างตารางอัตโนมัติ */}
       {showGenerateModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
@@ -1135,7 +1453,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal เพิ่มวันเดี่ยว */}
       {showAddDateModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
@@ -1154,7 +1471,6 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {/* Modal ยืนยันลบวันที่เช็คชื่อ */}
       {dateToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl relative p-6 text-center animate-in zoom-in-95">

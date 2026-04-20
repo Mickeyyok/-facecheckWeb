@@ -134,27 +134,27 @@ export default function TeacherDashboard() {
   };
 
   return (
-    <div className="p-8 lg:p-10 space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
+    <div className="p-4 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
       
       {/* Header: ค้นหา & สร้างคลาส */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
         <div>
-          <h3 className="text-2xl font-bold text-slate-800">คลาสของฉัน (My Classes)</h3>
-          <p className="text-slate-500 mt-1 text-sm">จัดการรายวิชาและเวลาเช็คชื่อ</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-slate-800">คลาสของฉัน (My Classes)</h3>
+          <p className="text-slate-500 mt-1 text-xs sm:text-sm">จัดการรายวิชาและเวลาเช็คชื่อ</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto mt-2 lg:mt-0">
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
               placeholder="ค้นหารายวิชา..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
             />
           </div>
-          <button onClick={() => setShowCreateClassModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-purple-700 transition shadow-sm">
-            <Plus size={18} /><span>สร้างคลาส</span>
+          <button onClick={() => setShowCreateClassModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">
+            <Plus size={16} /><span>สร้างคลาส</span>
           </button>
         </div>
       </div>
@@ -175,35 +175,35 @@ export default function TeacherDashboard() {
         </div>
       ) : (
         /* Grid คลาสเรียน */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {filteredCourses.map(course => (
             <div key={course.id} className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition overflow-hidden flex flex-col">
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex flex-col items-start">
+              <div className="p-4 sm:p-6">
+                <div className="flex justify-between items-start mb-3 sm:mb-4">
+                  <div className="flex flex-col items-start min-w-0 pr-2">
                     <span className="text-[10px] font-bold px-2 py-1 rounded-md mb-2 uppercase border bg-slate-50 text-slate-500 border-slate-200">
                       {course.scheduleDay || 'ยังไม่ระบุวัน'}
                     </span>
-                    <h4 className="text-xl font-bold text-slate-800 leading-tight">{course.subjectName}</h4>
-                    <span className="text-sm font-semibold text-purple-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
+                    <h4 className="text-lg sm:text-xl font-bold text-slate-800 leading-tight truncate w-full">{course.subjectName}</h4>
+                    <span className="text-xs sm:text-sm font-semibold text-purple-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
                   </div>
-                  <button onClick={() => setClassToDelete(course)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="ลบคลาส"><Trash2 size={18}/></button>
+                  <button onClick={() => setClassToDelete(course)} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition shrink-0" title="ลบคลาส"><Trash2 size={16} className="sm:hidden" /><Trash2 size={18} className="hidden sm:block" /></button>
                 </div>
                 
-                <div className="space-y-2 text-sm text-slate-600 mt-6 border-t border-slate-100 pt-4">
-                  <div className="flex items-center"><Calendar size={16} className="mr-2 text-slate-400"/> {formatTime(course.startTime, course.endTime)}</div>
-                  <div className="flex items-center"><MapPin size={16} className="mr-2 text-slate-400"/> ห้อง {course.room || '-'}</div>
-                  <div className="flex items-center"><Clock size={16} className="mr-2 text-slate-400"/> เกณฑ์สาย: {course.lateThresholdMinutes || 15} นาที</div>
+                <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-slate-600 mt-4 sm:mt-6 border-t border-slate-100 pt-3 sm:pt-4">
+                  <div className="flex items-center"><Calendar size={14} className="sm:hidden mr-1.5 text-slate-400"/><Calendar size={16} className="hidden sm:block mr-2 text-slate-400"/> {formatTime(course.startTime, course.endTime)}</div>
+                  <div className="flex items-center"><MapPin size={14} className="sm:hidden mr-1.5 text-slate-400"/><MapPin size={16} className="hidden sm:block mr-2 text-slate-400"/> ห้อง {course.room || '-'}</div>
+                  <div className="flex items-center"><Clock size={14} className="sm:hidden mr-1.5 text-slate-400"/><Clock size={16} className="hidden sm:block mr-2 text-slate-400"/> เกณฑ์สาย: {course.lateThresholdMinutes || 15} นาที</div>
                 </div>
               </div>
               
-              <div className="mt-auto bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-xs text-slate-500 font-medium bg-white px-2 py-1 border border-slate-200 rounded">เกณฑ์: สายหลัง {course.lateThresholdMinutes || 15} นาที</span>
+              <div className="mt-auto bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex justify-between items-center">
+                <span className="text-[10px] sm:text-xs text-slate-500 font-medium bg-white px-2 py-1 border border-slate-200 rounded">เกณฑ์: สายหลัง {course.lateThresholdMinutes || 15} นาที</span>
                 <button 
                   onClick={() => navigate(`/teacher/course/${course.id}`)} 
-                  className="text-purple-600 text-sm font-bold flex items-center hover:text-purple-800 transition"
+                  className="text-purple-600 text-xs sm:text-sm font-bold flex items-center hover:text-purple-800 transition"
                 >
-                  จัดการคลาส <ChevronRight size={16} className="ml-1"/>
+                  จัดการคลาส <ChevronRight size={14} className="sm:hidden ml-0.5"/><ChevronRight size={16} className="hidden sm:block ml-1"/>
                 </button>
               </div>
             </div>

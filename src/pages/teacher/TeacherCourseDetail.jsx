@@ -60,6 +60,27 @@ export default function TeacherCourseDetail() {
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [dailyFilter, setDailyFilter] = useState('all');
 
+  // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
+  const [nowTime, setNowTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTime(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getScanStatus = () => {
+    const { start, absent } = courseTimeSettings;
+    if (!start || !absent) return { isOpen: false, label: '-' };
+    const [sH, sM] = start.split(':').map(Number);
+    const [aH, aM] = absent.split(':').map(Number);
+    const nowMin = nowTime.getHours() * 60 + nowTime.getMinutes();
+    const startMin = sH * 60 + sM;
+    const absentMin = aH * 60 + aM;
+    if (nowMin >= startMin && nowMin < absentMin) return { isOpen: true, label: `เปิดสแกน (ปิด ${absent} น.)` };
+    if (nowMin >= absentMin) return { isOpen: false, label: `ปิดสแกนแล้ว (ตั้งแต่ ${absent} น.)` };
+    return { isOpen: false, label: `ยังไม่ถึงเวลา (เปิด ${start} น.)` };
+  };
+  const scanStatus = getScanStatus();
+
   const [riskAlerts, setRiskAlerts] = useState([
     { id: 1, studentId: '640002', studentName: 'นายวนนนท์ แสงทอง', issue: 'ขาดเรียนสะสมเกิน 20%', status: 'pending' }
   ]);
@@ -592,10 +613,17 @@ export default function TeacherCourseDetail() {
                   <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-purple-50 text-purple-600 font-bold px-4 py-2 rounded-lg hover:bg-purple-100 transition shadow-sm">แก้ไขเวลา</button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div className="border border-green-200 bg-green-50 p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-sm block mb-1">ตรงเวลา (เริ่มคลาส)</span><span className="text-2xl font-bold text-green-800">{courseTimeSettings.start} น.</span></div>
                   <div className="border border-yellow-200 bg-yellow-50 p-5 rounded-xl shadow-sm"><span className="text-yellow-600 font-bold text-sm block mb-1">สาย (หลังจากเวลา)</span><span className="text-2xl font-bold text-yellow-800">{courseTimeSettings.late} น.</span></div>
-                  <div className="border border-red-200 bg-red-50 p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-sm block mb-1">ขาดเรียน (หลังจากเวลา)</span><span className="text-2xl font-bold text-red-800">{courseTimeSettings.absent} น.</span></div>
+                  <div className="border border-red-200 bg-red-50 p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-sm block mb-1">ขาดเรียน / ปิดสแกน</span><span className="text-2xl font-bold text-red-800">{courseTimeSettings.absent} น.</span></div>
+                </div>
+
+                {/* สถานะสแกน real-time */}
+                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-5 ${scanStatus.isOpen ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
+                  <div className={`w-2.5 h-2.5 rounded-full ${scanStatus.isOpen ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-400'}`}></div>
+                  <Clock size={14} />
+                  <span>{scanStatus.label}</span>
                 </div>
 
                 {/* วันที่มีเช็คชื่อ */}

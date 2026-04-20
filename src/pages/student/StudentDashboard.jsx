@@ -71,8 +71,49 @@ export default function StudentDashboard() {
     fetchAttendanceHistory();
   }, [user]);
 
-  // วิชาที่กำลังจะเรียน (ให้เป็นวิชาแรกในลิสต์)
-  const activeCourse = studentClasses.length > 0 ? studentClasses[0] : null;
+  // --- นาฬิกา real-time (อัพเดททุก 10 วินาที) ---
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // --- ฟังก์ชันคำนวณเวลาปิดสแกนของแต่ละวิชา ---
+  const getCourseDeadline = (course) => {
+    if (!course?.startTime) return null;
+    const start = course.startTime.substring(0, 5);
+    const [h, m] = start.split(':').map(Number);
+    const lateMin = course.lateThresholdMinutes || 15;
+    const absentMin = lateMin * 2;
+    const absentTotalMin = h * 60 + m + absentMin;
+    const deadline = new Date();
+    deadline.setHours(Math.floor(absentTotalMin / 60), absentTotalMin % 60, 0, 0);
+    return deadline;
+  };
+
+  // --- เลือกวิชาที่ยังเปิดสแกนอยู่ (ข้ามวิชาที่หมดเวลาแล้ว ไปวิชาถัดไป) ---
+  const activeCourse = (() => {
+    if (studentClasses.length === 0) return null;
+    // เรียงตาม startTime
+    const sorted = [...studentClasses].sort((a, b) => {
+      const aTime = a.startTime || '00:00';
+      const bTime = b.startTime || '00:00';
+      return aTime.localeCompare(bTime);
+    });
+    // หาวิชาแรกที่ยังไม่หมดเวลาสแกน
+    for (const course of sorted) {
+      const deadline = getCourseDeadline(course);
+      if (!deadline || now <= deadline) return course;
+    }
+    // ทุกวิชาหมดเวลาแล้ว → ไม่แสดงวิชาใดเลย
+    return null;
+  })();
+
+  const scanDeadline = activeCourse ? getCourseDeadline(activeCourse) : null;
+  const isScanClosed = scanDeadline ? now > scanDeadline : false;
+  const scanDeadlineStr = scanDeadline
+    ? `${String(scanDeadline.getHours()).padStart(2, '0')}:${String(scanDeadline.getMinutes()).padStart(2, '0')}`
+    : null;
 
   // 2. ฟังก์ชันขอพิกัด GPS
   const getLocation = () => {
@@ -172,6 +213,7 @@ export default function StudentDashboard() {
   const handleCheckIn = () => {
     if (!modelsLoaded) return alert('ระบบ AI กำลังโหลดข้อมูล กรุณารอสักครู่...');
     if (!activeCourse) return alert('ยังไม่มีวิชาเรียนที่ต้องเช็คชื่อในตอนนี้');
+    if (isScanClosed) return alert(`ปิดระบบเช็คชื่อแล้ว (หมดเวลาตั้งแต่ ${scanDeadlineStr} น.)`);
     setShowCheckInModal(true);
     processCheckIn();
   };
@@ -324,6 +366,10 @@ export default function StudentDashboard() {
                 <div className="bg-emerald-500 text-white px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed shadow-lg border border-emerald-400">
                   <CheckCircle size={20} strokeWidth={2.5} /><span>เช็กชื่อเรียบร้อยแล้ว</span>
                 </div>
+              ) : isScanClosed && activeCourse ? (
+                <div className="bg-rose-500/20 text-rose-100 px-8 py-4 rounded-xl font-extrabold text-[16px] flex items-center justify-center space-x-2.5 w-full sm:w-auto cursor-not-allowed border border-rose-400/30 backdrop-blur-sm">
+                  <Clock size={20} strokeWidth={2.5} /><span>หมดเวลาสแกน ({scanDeadlineStr} น.)</span>
+                </div>
               ) : activeCourse ? (
                 <button onClick={handleCheckIn} className="bg-white text-[#2b4cdd] px-8 py-4 rounded-xl font-extrabold text-[16px] hover:bg-blue-50 shadow-xl flex items-center justify-center space-x-2.5 transform transition-all hover:-translate-y-1 hover:shadow-2xl active:scale-95 w-full sm:w-auto">
                   <Camera size={20} strokeWidth={2.5} /><span>เช็กชื่อเข้าเรียน</span>
@@ -368,26 +414,36 @@ export default function StudentDashboard() {
                   <p className="text-sm text-slate-400 mt-1">รออาจารย์เพิ่มชื่อเข้าคลาส</p>
                 </div>
               ) : (
-                studentClasses.map((course, idx) => (
-                  <div key={course.id} className={`p-5 rounded-2xl border transition-all ${idx === 0 ? 'bg-blue-50/60 border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
-                    <div className="flex justify-between items-start mb-2.5">
-                      <h5 className={`font-bold text-[16px] ${idx === 0 ? 'text-blue-900' : 'text-slate-700'}`}>
-                        {course.subjectCode} {course.subjectName}
-                      </h5>
+                [...studentClasses].sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00')).map((course) => {
+                  const isActive = activeCourse && course.id === activeCourse.id;
+                  const dl = getCourseDeadline(course);
+                  const isExpired = dl ? now > dl : false;
+                  return (
+                    <div key={course.id} className={`p-5 rounded-2xl border transition-all ${isActive ? 'bg-blue-50/60 border-blue-200 shadow-sm' : isExpired ? 'bg-slate-50 border-slate-100 opacity-50' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
+                      <div className="flex justify-between items-start mb-2.5">
+                        <h5 className={`font-bold text-[16px] ${isActive ? 'text-blue-900' : isExpired ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                          {course.subjectCode} {course.subjectName}
+                        </h5>
+                      </div>
+                      <div className="flex flex-col gap-1.5 text-[13px] text-slate-500 font-medium mb-3">
+                        <span className="flex items-center">
+                          <Clock size={14} className="mr-2 text-slate-400"/> 
+                          {course.startTime ? course.startTime.substring(0,5) : '-'} - {course.endTime ? course.endTime.substring(0,5) : '-'} • ห้อง {course.room || '-'}
+                        </span>
+                      </div>
+                      {isActive && (
+                        <span className="inline-block bg-white border border-blue-200 text-[#2b4cdd] text-[11px] font-extrabold px-3 py-1 rounded-full shadow-sm">
+                          กำลังเปิดเช็คชื่อ
+                        </span>
+                      )}
+                      {isExpired && !isActive && (
+                        <span className="inline-block bg-slate-100 border border-slate-200 text-slate-400 text-[11px] font-extrabold px-3 py-1 rounded-full">
+                          หมดเวลาแล้ว
+                        </span>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-1.5 text-[13px] text-slate-500 font-medium mb-3">
-                      <span className="flex items-center">
-                        <Clock size={14} className="mr-2 text-slate-400"/> 
-                        {course.startTime ? course.startTime.substring(0,5) : '-'} - {course.endTime ? course.endTime.substring(0,5) : '-'} • ห้อง {course.room || '-'}
-                      </span>
-                    </div>
-                    {idx === 0 && (
-                      <span className="inline-block bg-white border border-blue-200 text-[#2b4cdd] text-[11px] font-extrabold px-3 py-1 rounded-full shadow-sm">
-                        วิชาถัดไป
-                      </span>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             

@@ -87,6 +87,14 @@ export default function TeacherCourseDetail() {
   }, []);
 
   const getScanStatus = () => {
+    // ✅ ถ้ายกเลิกคลาสแล้ว ปิดสแกนทันที
+    if (isClassCanceled) return { isOpen: false, label: '❌ ยกเลิกคลาสวันนี้แล้ว' };
+
+    // ✅ ถ้าวันนี้ไม่มีในตาราง scheduledDates ก็ปิดสแกน
+    const todayCheck = getLocalDateString();
+    const isTodayScheduled = scheduledDates.some(d => d.date === todayCheck);
+    if (scheduledDates.length > 0 && !isTodayScheduled) return { isOpen: false, label: 'วันนี้ไม่มีคลาสเรียน' };
+
     const { start, absent } = courseTimeSettings;
     if (!start || !absent) return { isOpen: false, label: '-' };
     const [sH, sM] = start.split(':').map(Number);
@@ -585,12 +593,18 @@ export default function TeacherCourseDetail() {
 
   const handleCancelClass = async () => {
     try {
+      // ✅ Backend จะลบวันนี้ออกจาก scheduledDates + ส่ง notification ในครั้งเดียว
       await classService.notifyCancelClass(courseId);
+
+      // ✅ Sync local state ให้ตรงกับ DB
+      const todayCancelStr = getLocalDateString();
+      setScheduledDates(prev => prev.filter(d => d.date !== todayCancelStr));
+
       setIsClassCanceled(true);
       setShowCancelClassConfirm(false);
-      alert('แจ้งยกคลาสและส่งแจ้งเตือนให้นักศึกษาแล้ว');
+      alert('ยกเลิกคลาสวันนี้เรียบร้อยแล้ว! ลบออกจากตารางและส่งแจ้งเตือนนักศึกษาแล้ว');
     } catch (error) {
-      alert('ไม่สามารถส่งแจ้งเตือนยกคลาสได้');
+      alert('ไม่สามารถยกเลิกคลาสได้: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -617,11 +631,20 @@ export default function TeacherCourseDetail() {
 
   const saveDatesToDB = async (datesArray) => {
     try {
+      // ✅ ใช้ชื่อ field ที่ตรงกับ Backend DTO (subjectName, subjectCode, instructorName)
       await classService.updateClass(courseId, {
-        ...courseInfo,
+        subjectName: courseInfo.name,
+        subjectCode: courseInfo.code,
+        instructorName: courseInfo.instructor,
+        room: courseInfo.room,
+        term: courseInfo.term,
         scheduledDates: JSON.stringify(datesArray)
       });
-    } catch (err) {}
+      console.log('✅ บันทึก scheduledDates สำเร็จ:', datesArray.length, 'วัน');
+    } catch (err) {
+      console.error('❌ บันทึก scheduledDates ไม่สำเร็จ:', err);
+      alert('บันทึกตารางเรียนไม่สำเร็จ: ' + (err.response?.data?.message || err.message));
+    }
   };
 
   const handleGenerateDates = () => {

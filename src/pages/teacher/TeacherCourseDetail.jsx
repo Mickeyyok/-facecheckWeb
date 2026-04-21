@@ -53,7 +53,7 @@ export default function TeacherCourseDetail() {
   const [courseTimeSettings, setCourseTimeSettings] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
   const [editTimeForm, setEditTimeForm] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
 
-  const [locationSettings, setLocationSettings] = useState({ name: 'ห้องเรียน', lat: '13.777045', lng: '100.556021', radius: 50 });
+  const [locationSettings, setLocationSettings] = useState({ name: '', lat: '', lng: '', radius: 50 });
   const [editLocationForm, setEditLocationForm] = useState(locationSettings);
 
   const [studentList, setStudentList] = useState([]);
@@ -931,29 +931,49 @@ export default function TeacherCourseDetail() {
                 </div>
                 <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 sm:gap-6 items-center shadow-sm">
                   <div className="w-full md:w-1/3 h-48 sm:h-56 rounded-xl overflow-hidden shadow-inner border border-slate-300 relative z-0">
-                    <MapContainer
-                      center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]}
-                      zoom={17}
-                      scrollWheelZoom={false}
-                      dragging={false}
-                      zoomControl={false}
-                      attributionControl={false}
-                      style={{ height: '100%', width: '100%' }}
-                    >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <ChangeMapView center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]} />
-                      <Marker position={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]} />
-                      <Circle
-                        center={[parseFloat(locationSettings.lat) || 13.777, parseFloat(locationSettings.lng) || 100.556]}
-                        radius={locationSettings.radius || 50}
-                        pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15 }}
-                      />
-                    </MapContainer>
+                    {locationSettings.lat && locationSettings.lng ? (
+                      <MapContainer
+                        center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]}
+                        zoom={17}
+                        scrollWheelZoom={false}
+                        dragging={false}
+                        zoomControl={false}
+                        attributionControl={false}
+                        style={{ height: '100%', width: '100%' }}
+                      >
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        <ChangeMapView center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]} />
+                        <Marker position={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]} />
+                        <Circle
+                          center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]}
+                          radius={locationSettings.radius || 50}
+                          pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15 }}
+                        />
+                      </MapContainer>
+                    ) : (
+                      <div className="w-full h-full bg-slate-200/50 flex flex-col items-center justify-center text-slate-400">
+                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                          <MapPin size={24} className="text-slate-300" />
+                        </div>
+                        <p className="font-bold text-sm text-slate-500">ยังไม่มีข้อมูลพิกัด</p>
+                        <p className="text-xs mt-1 font-medium text-slate-400">คลิกที่ "ตั้งค่าพิกัด" เพื่อระบุ</p>
+                      </div>
+                    )}
                   </div>
                   <div className="w-full md:w-2/3 space-y-3 sm:space-y-4">
-                    <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span><p className="font-bold text-slate-800 text-base sm:text-lg mt-0.5">{locationSettings.name}</p></div>
+                    <div>
+                      <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span>
+                      <p className={`font-bold text-base sm:text-lg mt-0.5 ${locationSettings.name ? 'text-slate-800' : 'text-slate-400 italic'}`}>
+                        {locationSettings.name || 'ยังไม่ได้ตั้งค่า'}
+                      </p>
+                    </div>
                     <div className="flex flex-col sm:flex-row flex-wrap gap-x-8 gap-y-2 sm:gap-y-3">
-                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">พิกัด (Lat, Lng)</span><p className="font-medium text-slate-700 mt-0.5 text-sm sm:text-base">{locationSettings.lat}, {locationSettings.lng}</p></div>
+                      <div>
+                        <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">พิกัด (Lat, Lng)</span>
+                        <p className={`font-medium mt-0.5 text-sm sm:text-base ${locationSettings.lat ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+                          {locationSettings.lat && locationSettings.lng ? `${locationSettings.lat}, ${locationSettings.lng}` : 'ยังไม่ได้ตั้งค่า'}
+                        </p>
+                      </div>
                       <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-blue-600 bg-blue-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
                     </div>
                   </div>

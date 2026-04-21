@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X, Calendar, AlertOctagon } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X, Calendar, AlertOctagon, FileText, Send, Loader2, Upload, ImageIcon } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { attendanceService } from '../../services/attendanceService';
 import { classService } from '../../services/classService';
+import { leaveRequestService } from '../../services/leaveRequestService';
+import { showSuccess, showError, showAlert } from '../../utils/alertPopup';
 import api from '../../services/api';
 
 export default function StudentDashboard() {
@@ -21,6 +23,13 @@ export default function StudentDashboard() {
   const [scanStep, setScanStep] = useState(0); 
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // --- ใบลา ---
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({ leaveType: 'sick', leaveDate: '', reason: '' });
+  const [submittingLeave, setSubmittingLeave] = useState(false);
+  const [attachmentImage, setAttachmentImage] = useState(null);
+  const [attachmentPreview, setAttachmentPreview] = useState(null);
 
   // --- นาฬิกา real-time อัพเดตทุก 10 วินาที ---
   const [now, setNow] = useState(new Date());
@@ -219,6 +228,32 @@ export default function StudentDashboard() {
     return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'AI Suggestion', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
   })(classStats.absent);
 
+  const handleSubmitLeave = async () => {
+    if (!leaveForm.leaveDate) return showAlert('กรุณาเลือกวันที่ลา');
+    if (!leaveForm.reason.trim()) return showAlert('กรุณากรอกเหตุผลการลา');
+    if (!activeCourse) return showAlert('กรุณาเลือกวิชาก่อน');
+    try {
+      setSubmittingLeave(true);
+      await leaveRequestService.createLeaveRequest({
+        studentId: user.id,
+        classId: activeCourse.id,
+        leaveType: leaveForm.leaveType,
+        leaveDate: leaveForm.leaveDate,
+        reason: leaveForm.reason,
+        attachmentImage: attachmentImage,
+      });
+      showSuccess('ส่งใบลาเรียบร้อย!', 'ระบบส่งคำขอไปยังอาจารย์ผู้สอนแล้ว');
+      setShowLeaveModal(false);
+      setLeaveForm({ leaveType: 'sick', leaveDate: '', reason: '' });
+      setAttachmentImage(null);
+      setAttachmentPreview(null);
+    } catch (err) {
+      showError('ส่งใบลาไม่สำเร็จ', err.response?.data?.message || err.message);
+    } finally {
+      setSubmittingLeave(false);
+    }
+  };
+
   return (
     <div className="p-8 lg:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-[1400px] mx-auto space-y-8 text-slate-800">
       <h3 className="text-[28px] font-extrabold flex items-center flex-wrap gap-3">
@@ -341,6 +376,25 @@ export default function StudentDashboard() {
               <p className="text-[15px] text-white/90 leading-relaxed font-medium">{aiAnalysis.msg}</p>
             </div>
           </div>
+
+          {/* ปุ่มส่งใบลา */}
+          {activeCourse && (
+            <button
+              onClick={() => setShowLeaveModal(true)}
+              className="w-full bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 flex items-center justify-between hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center shadow-inner">
+                  <FileText size={24} />
+                </div>
+                <div className="text-left">
+                  <h4 className="font-bold text-slate-800">ส่งใบลา</h4>
+                  <p className="text-xs text-slate-400 font-medium">ลาป่วย / ลากิจ</p>
+                </div>
+              </div>
+              <Send size={18} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+            </button>
+          )}
         </div>
 
         <div className="lg:col-span-1 space-y-8 flex flex-col">
@@ -373,19 +427,198 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {showCheckInModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 text-slate-800">
-            <button onClick={() => { stopVideo(); setShowCheckInModal(false); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><XCircle size={24}/></button>
-            <h3 className="text-xl font-bold text-center mb-1">เช็กชื่อเข้าเรียน</h3>
-            <p className="text-center text-blue-600 font-medium text-sm mb-4">{activeCourse?.subjectName}</p>
-            <div className="bg-slate-900 aspect-[4/3] rounded-xl overflow-hidden relative flex flex-col items-center justify-center text-white mb-6">
-              {scanStep === 0 && <div className="animate-pulse flex flex-col items-center"><MapPin size={32} className="text-blue-400 mb-2"/><p>ตรวจสอบพิกัด GPS...</p></div>}
-              {scanStep === 1 && <><video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover"/><div className="absolute inset-0 border-2 border-green-400/80 m-8 rounded-xl animate-pulse flex items-center justify-center"><span className="bg-black/60 px-3 py-1 rounded-full text-xs">กำลังวิเคราะห์ใบหน้า...</span></div></>}
-              {scanStep === 2 && <div className="bg-green-500 absolute inset-0 flex flex-col items-center justify-center text-white"><CheckCircle size={48} className="mb-2"/><h4>สำเร็จ!</h4></div>}
-              {scanStep === 3 && <div className="bg-red-500 absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white"><AlertTriangle size={48} className="mb-2"/><h4>ไม่สำเร็จ</h4><p className="text-sm">{errorMessage}</p><button onClick={() => processCheckIn()} className="mt-4 bg-white text-red-600 px-4 py-2 rounded-lg font-bold">ลองใหม่</button></div>}
+      {/* Modal ส่งใบลา */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative p-8 text-slate-800">
+            <button onClick={() => setShowLeaveModal(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors z-50"><X size={20}/></button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                <FileText size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-800 mb-1">ส่งใบลา</h3>
+              <div className="inline-flex items-center justify-center bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-bold text-sm border border-blue-100 shadow-sm">
+                {activeCourse?.subjectCode} {activeCourse?.subjectName}
+              </div>
             </div>
-            {(scanStep === 2 || scanStep === 3) && <button onClick={() => setShowCheckInModal(false)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">ปิดหน้าต่าง</button>}
+
+            <div className="space-y-4">
+              {/* ประเภทการลา */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">ประเภทการลา</label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setLeaveForm(f => ({ ...f, leaveType: 'sick' }))}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                      leaveForm.leaveType === 'sick'
+                        ? 'bg-rose-50 border-rose-300 text-rose-600 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    🏥 ลาป่วย
+                  </button>
+                  <button
+                    onClick={() => setLeaveForm(f => ({ ...f, leaveType: 'personal' }))}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                      leaveForm.leaveType === 'personal'
+                        ? 'bg-blue-50 border-blue-300 text-blue-600 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    📋 ลากิจ
+                  </button>
+                </div>
+              </div>
+
+              {/* วันที่ลา */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">วันที่ลา</label>
+                <input
+                  type="date"
+                  value={leaveForm.leaveDate}
+                  onChange={(e) => setLeaveForm(f => ({ ...f, leaveDate: e.target.value }))}
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+                />
+              </div>
+
+              {/* เหตุผล */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">เหตุผลการลา</label>
+                <textarea
+                  value={leaveForm.reason}
+                  onChange={(e) => setLeaveForm(f => ({ ...f, reason: e.target.value }))}
+                  placeholder="กรอกเหตุผลการลา..."
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium resize-none"
+                />
+              </div>
+
+              {/* แนบรูปภาพ */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">แนบรูปภาพ <span className="text-slate-400 font-medium">(ไม่บังคับ)</span></label>
+                {attachmentPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border-2 border-slate-200">
+                    <img src={attachmentPreview} alt="Preview" className="w-full h-40 object-cover" />
+                    <button
+                      onClick={() => { setAttachmentImage(null); setAttachmentPreview(null); }}
+                      className="absolute top-2 right-2 bg-slate-900/60 text-white p-1.5 rounded-full hover:bg-slate-900/80 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                    <div className="absolute bottom-2 left-2 bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle size={12} /> แนบรูปแล้ว
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
+                    <Upload size={24} className="text-slate-300 mb-2" />
+                    <span className="text-xs text-slate-400 font-medium">คลิกเพื่ออัปโหลดรูปภาพ</span>
+                    <span className="text-[10px] text-slate-300 mt-0.5">เช่น ใบรับรองแพทย์ หรือเอกสารประกอบ</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        if (file.size > 5 * 1024 * 1024) return showAlert('ไฟล์ใหญ่เกินไป', 'กรุณาเลือกรูปภาพขนาดไม่เกิน 5MB');
+                        setAttachmentPreview(URL.createObjectURL(file));
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setAttachmentImage(ev.target.result);
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowLeaveModal(false)}
+                className="flex-1 py-3.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleSubmitLeave}
+                disabled={submittingLeave}
+                className="flex-[2] py-3.5 rounded-xl font-extrabold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {submittingLeave ? (
+                  <><Loader2 size={18} className="animate-spin" /> กำลังส่ง...</>
+                ) : (
+                  <><Send size={18} /> ส่งใบลา</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCheckInModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative p-8 text-slate-800 transform transition-all">
+            <button onClick={() => { stopVideo(); setShowCheckInModal(false); }} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors z-50"><X size={20}/></button>
+            
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-black text-slate-800 mb-2">เช็กชื่อเข้าเรียน</h3>
+              <div className="inline-flex items-center justify-center bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-bold text-sm border border-blue-100 shadow-sm">
+                {activeCourse?.subjectCode} {activeCourse?.subjectName}
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 aspect-[4/3] rounded-2xl overflow-hidden relative flex flex-col items-center justify-center text-slate-600 mb-8 shadow-inner">
+              {scanStep === 0 && (
+                <div className="animate-pulse flex flex-col items-center">
+                  <div className="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mb-3 shadow-inner">
+                    <MapPin size={32} />
+                  </div>
+                  <p className="font-bold text-slate-500">กำลังตรวจสอบพิกัด GPS...</p>
+                </div>
+              )}
+              
+              {scanStep === 1 && (
+                <>
+                  <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover"/>
+                  <div className="absolute inset-0 border-[3px] border-blue-500/50 m-6 rounded-2xl animate-pulse flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/50 backdrop-blur-md px-4 py-2 rounded-full text-white text-xs font-bold tracking-wide flex items-center gap-2">
+                      <span className="w-2 h-2 bg-blue-400 rounded-full animate-ping"></span>
+                      กำลังวิเคราะห์ใบหน้า...
+                    </div>
+                  </div>
+                </>
+              )}
+              
+              {scanStep === 2 && (
+                <div className="absolute inset-0 bg-white flex flex-col items-center justify-center text-center animate-in zoom-in duration-300">
+                  <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-4 relative">
+                    <div className="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-50"></div>
+                    <CheckCircle size={48} className="text-emerald-500 relative z-10" strokeWidth={2.5} />
+                  </div>
+                  <h4 className="text-2xl font-black text-emerald-600 mb-1">สำเร็จ!</h4>
+                  <p className="text-slate-500 font-medium text-sm">ระบบบันทึกการเข้าเรียนเรียบร้อยแล้ว</p>
+                </div>
+              )}
+              
+              {scanStep === 3 && (
+                <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-6 text-center animate-in zoom-in duration-300">
+                  <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mb-4">
+                    <AlertTriangle size={40} className="text-rose-500" strokeWidth={2.5} />
+                  </div>
+                  <h4 className="text-xl font-black text-rose-600 mb-2">ไม่สำเร็จ</h4>
+                  <p className="text-sm text-slate-500 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100">{errorMessage}</p>
+                  <button onClick={() => processCheckIn()} className="mt-5 bg-rose-50 hover:bg-rose-100 text-rose-600 px-6 py-2.5 rounded-xl font-bold transition-colors border border-rose-100">ลองใหม่อีกครั้ง</button>
+                </div>
+              )}
+            </div>
+
+            {(scanStep === 2 || scanStep === 3) && (
+              <button onClick={() => setShowCheckInModal(false)} className={`w-full py-4 rounded-xl font-extrabold text-white shadow-lg transition-all active:scale-[0.98] ${scanStep === 2 ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/25' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-800/25'}`}>
+                {scanStep === 2 ? 'กลับสู่หน้าหลัก' : 'ปิดหน้าต่าง'}
+              </button>
+            )}
           </div>
         </div>
       )}

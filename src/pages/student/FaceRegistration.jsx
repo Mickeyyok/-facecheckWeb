@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as faceapi from 'face-api.js';
+import { showSuccess, showError, showAlert } from '../../utils/alertPopup';
 
 // กำหนดมุมที่เราต้องการสแกน (4 มุม)
 const poses = ['straight', 'left', 'right', 'up'];
@@ -55,9 +56,9 @@ const FaceRegistration = () => {
     } catch (err) {
       console.error('เปิดกล้องไม่ได้เพราะ:', err.name);
       if (err.name === 'NotAllowedError') {
-        alert("กรุณากด 'อนุญาต' (Allow) ให้เข้าถึงกล้องบนเบราว์เซอร์ด้วยนะครับ");
+        showError("ไม่สามารถเข้าถึงกล้องได้", "กรุณากด 'อนุญาต' (Allow) ให้เข้าถึงกล้องบนเบราว์เซอร์ด้วยนะครับ");
       } else {
-        alert('ไม่พบกล้องเว็บแคม หรือกล้องถูกโปรแกรมอื่นใช้งานอยู่ครับ');
+        showError('เกิดข้อผิดพลาด', 'ไม่พบกล้องเว็บแคม หรือกล้องถูกโปรแกรมอื่นใช้งานอยู่ครับ');
       }
     }
   };
@@ -81,14 +82,15 @@ const FaceRegistration = () => {
 
       if (currentPoseIndex < poses.length - 1) {
         setCurrentPoseIndex(currentPoseIndex + 1);
-        alert(
-          `สแกนมุม ${currentPose} สำเร็จ! กรุณา ${poseTexts[poses[currentPoseIndex + 1]]}`
+        showSuccess(
+          `สแกนมุม ${currentPose.toUpperCase()} สำเร็จ!`,
+          `ขั้นตอนต่อไป: ${poseTexts[poses[currentPoseIndex + 1]]}`
         );
       } else {
-        alert('สแกนใบหน้าครบทุกมุมแล้วครับ! 🎉 พร้อมบันทึกข้อมูล');
+        showSuccess('ยอดเยี่ยม!', 'สแกนใบหน้าครบทุกมุมแล้วครับ 🎉 พร้อมบันทึกข้อมูล');
       }
     } else {
-      alert('ไม่พบใบหน้า กรุณาจัดมุมหน้าใหม่ให้ตรงกับที่ระบุครับ');
+      showAlert('ไม่พบใบหน้า', 'กรุณาขยับใบหน้าให้อยู่ในกรอบ หรือปรับแสงสว่างให้เพียงพอครับ');
     }
     setIsCapturing(false);
   };
@@ -96,7 +98,7 @@ const FaceRegistration = () => {
   // 4. เตรียมข้อมูลและส่ง Backend
   const handleSubmit = async () => {
     if (Object.keys(descriptors).length < 4) {
-      return alert('กรุณาสแกนให้ครบทั้ง 4 มุมก่อนบันทึกข้อมูลครับ');
+      return showAlert('ข้อมูลยังไม่ครบ', 'กรุณาสแกนให้ครบทั้ง 4 มุมก่อนกดบันทึกข้อมูลครับ');
     }
 
     // [[128 ตัว], [128 ตัว], ...] รวม 4 ชุด

@@ -624,8 +624,6 @@ export default function TeacherCourseDetail() {
 
       setIsClassCanceled(true);
       setShowCancelClassConfirm(false);
-      setIsClassCanceled(true);
-      setShowCancelClassConfirm(false);
       showSuccess('ยกเลิกคลาสวันนี้เรียบร้อยแล้ว!', 'ลบออกจากตารางและส่งแจ้งเตือนนักศึกษาแล้ว');
     } catch (error) {
       showError('ไม่สามารถยกเลิกคลาสได้', error.response?.data?.message || error.message);

@@ -4,6 +4,7 @@ import { LayoutDashboard, BookOpen, History, Bell, LogOut, Users, Menu, X } from
 import { useAuth } from '../../context/AuthContext';
 import utccLogo from '../../assets/UTCC-Official-1.png';
 import { notificationService } from '../../services/notificationService';
+import { leaveRequestService } from '../../services/leaveRequestService';
 
 export default function MainLayout({ role }) {
   const { user, logout } = useAuth();
@@ -19,16 +20,25 @@ export default function MainLayout({ role }) {
 
   const fetchUnreadCount = () => {
     if (user?.id) {
+      // นับ Notification ที่ยังไม่อ่าน
       notificationService.getUserNotifications(user.id).then(data => {
         const unreadCount = data.filter(n => !n.isRead).length;
-        setUnreadNotificationsCount(unreadCount);
+
+        // สำหรับอาจารย์ ให้นับรวมคำขอลาที่รออนุมัติด้วย
+        if (role === 'teacher') {
+          leaveRequestService.getPendingByTeacher(user.id).then(leaves => {
+            setUnreadNotificationsCount(unreadCount + leaves.length);
+          }).catch(() => setUnreadNotificationsCount(unreadCount));
+        } else {
+          setUnreadNotificationsCount(unreadCount);
+        }
       }).catch(err => console.error(err));
     }
   };
 
   useEffect(() => {
     fetchUnreadCount();
-  }, [user]);
+  }, [user, location.pathname]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-blue-100">

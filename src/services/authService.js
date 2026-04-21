@@ -3,8 +3,8 @@ import api from './api';
 export const authService = {
   /**
    * Login
-   * - นักศึกษา: ส่ง { studentId, password }
-   * - อาจารย์: ส่ง { email, password }
+   * - ส่ง { username, password }
+   * - นักศึกษาใช้รหัสนักศึกษาเป็น username
    */
   login: async (loginData) => {
     try {
@@ -12,14 +12,14 @@ export const authService = {
       return response.data;
     } catch (error) {
       const message =
-        error.response?.data?.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+        error.response?.data?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
       throw new Error(message);
     }
   },
 
   /**
    * Register
-   * - ส่ง { role, email, studentId, password, fullName, faceDescriptor }
+   * - ส่ง { role, username, password, fullName, faceDescriptor }
    */
   register: async (userData) => {
     try {

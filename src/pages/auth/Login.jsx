@@ -242,11 +242,10 @@ export default function Login() {
       setIsLoading(true);
 
       if (authMode === 'register') {
+        // นักศึกษา: username = รหัสนักศึกษา | อาจารย์: username = ตั้งเอง
         const userData = {
           role: authRole,
-          email: isStudent ? `${identifier}@utcc.ac.th` : null,
-          username: isStudent ? null : identifier.trim(),
-          studentId: isStudent ? identifier : null,
+          username: identifier.trim(),
           password,
           fullName,
           faceDescriptor: faceDescriptor || [],
@@ -264,9 +263,8 @@ export default function Login() {
         switchMode('login');
 
       } else {
-        const loginData = isStudent
-          ? { studentId: identifier, password }
-          : { username: identifier.trim(), password };
+        // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษาส่งรหัสนักศึกษาเป็น username)
+        const loginData = { username: identifier.trim(), password };
         const response = await authService.login(loginData);
 
         // รองรับ response structure หลายรูปแบบ

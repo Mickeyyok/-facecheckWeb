@@ -211,8 +211,8 @@ export default function Login() {
       if (!fullName.trim()) return 'กรุณากรอกชื่อ - นามสกุล';
       if (isStudent && !STUDENT_ID_RE.test(identifier))
         return 'รหัสนักศึกษาต้องเป็นตัวเลข 13 หลัก';
-      if (!isStudent && identifier.trim().length < 4)
-        return 'ชื่อผู้ใช้ต้องมีอย่างน้อย 4 ตัวอักษร';
+      if (!isStudent && !EMAIL_RE.test(identifier))
+        return 'รูปแบบอีเมลไม่ถูกต้อง';
       if (password.length < 8) return 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';
       if (password !== confirmPassword) return 'รหัสผ่านไม่ตรงกัน';
       if (isStudent && !isFaceRegistered) return 'กรุณาลงทะเบียนใบหน้าให้ครบ 4 มุม';
@@ -220,8 +220,8 @@ export default function Login() {
       // login validation
       if (isStudent && identifier && !STUDENT_ID_RE.test(identifier))
         return 'รหัสนักศึกษาต้องเป็นตัวเลข 13 หลัก';
-      if (!isStudent && identifier.trim().length > 0 && identifier.trim().length < 4)
-        return 'ชื่อผู้ใช้ต้องมีอย่างน้อย 4 ตัวอักษร';
+      if (!isStudent && identifier.trim().length > 0 && !EMAIL_RE.test(identifier))
+        return 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     return null;
   };
@@ -245,7 +245,13 @@ export default function Login() {
         // นักศึกษา: username = รหัสนักศึกษา | อาจารย์: username = ตั้งเอง
         const userData = {
           role: authRole,
+<<<<<<< HEAD
           username: identifier.trim(),
+=======
+          email: isStudent ? `${identifier}@utcc.ac.th` : identifier.trim(),
+          username: null,
+          studentId: isStudent ? identifier : null,
+>>>>>>> 7c07554bb8fbe8640b79d8a0177f8bcbb64335cc
           password,
           fullName,
           faceDescriptor: faceDescriptor || [],
@@ -263,8 +269,14 @@ export default function Login() {
         switchMode('login');
 
       } else {
+<<<<<<< HEAD
         // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษาส่งรหัสนักศึกษาเป็น username)
         const loginData = { username: identifier.trim(), password };
+=======
+        const loginData = isStudent
+          ? { studentId: identifier, password }
+          : { email: identifier.trim(), password };
+>>>>>>> 7c07554bb8fbe8640b79d8a0177f8bcbb64335cc
         const response = await authService.login(loginData);
 
         // รองรับ response structure หลายรูปแบบ
@@ -351,15 +363,15 @@ export default function Login() {
               {/* รหัสนักศึกษา / username */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-600 ml-1">
-                  {authRole === 'student' ? 'รหัสนักศึกษา' : 'ชื่อผู้ใช้ (Username)'}
+                  {authRole === 'student' ? 'รหัสนักศึกษา' : 'อีเมล (Email)'}
                 </label>
                 <input
-                  type="text"
+                  type={authRole === 'student' ? 'text' : 'email'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={authRole === 'student' ? 'ระบุ 13 หลัก' : 'เช่น aj_somchai'}
+                  placeholder={authRole === 'student' ? 'ระบุ 13 หลัก' : 'เช่น teacher@utcc.ac.th'}
                   required
-                  inputMode={authRole === 'student' ? 'numeric' : 'text'}
+                  inputMode={authRole === 'student' ? 'numeric' : 'email'}
                   maxLength={authRole === 'student' ? 13 : undefined}
                   className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                 />

@@ -169,11 +169,39 @@ export default function StudentDashboard() {
 
   const stopVideo = () => { if (videoRef.current && videoRef.current.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop()); };
 
+  // คำนวณระยะทาง GPS 2 จุด (เมตร) ด้วยสูตร Haversine
+  const calcDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
   const processCheckIn = async () => {
     if (!activeCourse) return;
     try {
       setScanStep(0); setErrorMessage('');
+
+      // ✅ ตรวจสอบว่าอาจารย์ตั้งพิกัดไว้แล้วหรือยัง
+      const classLat = activeCourse.latitude != null ? parseFloat(activeCourse.latitude) : null;
+      const classLng = activeCourse.longitude != null ? parseFloat(activeCourse.longitude) : null;
+      const classRadius = activeCourse.radius != null ? parseFloat(activeCourse.radius) : null;
+      if (classLat == null || classLng == null || !classRadius) {
+        throw new Error('อาจารย์ยังไม่ได้ตั้งพิกัดห้องเรียน');
+      }
+
       const { lat, lng } = await getLocation();
+
+      // ✅ เช็คว่านักศึกษาอยู่ในพื้นที่ที่อาจารย์กำหนดไหม
+      const distance = calcDistance(lat, lng, classLat, classLng);
+      if (distance > classRadius) {
+        throw new Error('คุณไม่อยู่ในพื้นที่เช็กชื่อ');
+      }
+
       setScanStep(1); 
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       if (videoRef.current) videoRef.current.srcObject = stream;

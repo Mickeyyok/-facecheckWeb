@@ -17,13 +17,17 @@ export default function MainLayout({ role }) {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
-  useEffect(() => {
+  const fetchUnreadCount = () => {
     if (user?.id) {
       notificationService.getUserNotifications(user.id).then(data => {
         const unreadCount = data.filter(n => !n.isRead).length;
         setUnreadNotificationsCount(unreadCount);
       }).catch(err => console.error(err));
     }
+  };
+
+  useEffect(() => {
+    fetchUnreadCount();
   }, [user]);
 
   return (
@@ -146,7 +150,7 @@ export default function MainLayout({ role }) {
 
         {/* พื้นที่สำหรับแสดง Content ของแต่ละหน้า (Outlet) */}
         <main className="flex-1 overflow-x-hidden p-4 lg:p-8">
-          <Outlet />
+          <Outlet context={{ fetchUnreadCount, setUnreadNotificationsCount }} />
         </main>
       </div>
 

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle } from 'lucide-react';
+import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../services/notificationService';
 
 export default function Notifications({ role }) {
   const { user } = useAuth();
+  const context = useOutletContext();
+  const fetchUnreadCount = context?.fetchUnreadCount;
+  const setUnreadNotificationsCount = context?.setUnreadNotificationsCount;
   const [notifications, setNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [notificationToDelete, setNotificationToDelete] = useState(null);
@@ -46,6 +50,8 @@ export default function Notifications({ role }) {
     try {
       await notificationService.markAllAsRead(user.id);
       setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+      if (setUnreadNotificationsCount) setUnreadNotificationsCount(0);
+      else if (fetchUnreadCount) fetchUnreadCount();
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
@@ -58,6 +64,8 @@ export default function Notifications({ role }) {
       try {
         await notificationService.markAsRead(note.id);
         setNotifications(notifications.map(n => n.id === note.id ? { ...n, isRead: true } : n));
+        if (setUnreadNotificationsCount) setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+        else if (fetchUnreadCount) fetchUnreadCount();
       } catch (error) {
         console.error('Error marking as read:', error);
       }
@@ -69,6 +77,11 @@ export default function Notifications({ role }) {
     try {
       await notificationService.deleteNotification(notificationToDelete.id);
       setNotifications(notifications.filter(n => n.id !== notificationToDelete.id));
+      if (setUnreadNotificationsCount && !notificationToDelete.isRead) {
+        setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+      } else if (!setUnreadNotificationsCount && fetchUnreadCount) {
+        fetchUnreadCount();
+      }
       setNotificationToDelete(null);
     } catch (error) {
       console.error('Error deleting notification:', error);

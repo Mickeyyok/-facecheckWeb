@@ -84,6 +84,9 @@ export default function TeacherCourseDetail() {
   const [loadingTerm, setLoadingTerm] = useState(false);
   const [riskAlerts, setRiskAlerts] = useState([]);
 
+  // --- สถานะยกเลิกคลาส ---
+  const [isClassCanceled, setIsClassCanceled] = useState(false);
+
   // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
   const [nowTime, setNowTime] = useState(new Date());
   useEffect(() => {
@@ -113,7 +116,7 @@ export default function TeacherCourseDetail() {
   };
   const scanStatus = getScanStatus();
 
-  const [isClassCanceled, setIsClassCanceled] = useState(false);
+  // isClassCanceled ถูกย้ายไปประกาศด้านบน (ก่อน getScanStatus)
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showAddDateModal, setShowAddDateModal] = useState(false);
   const [newDateForm, setNewDateForm] = useState({ date: '', note: '' });

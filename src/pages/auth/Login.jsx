@@ -245,13 +245,7 @@ export default function Login() {
         // นักศึกษา: username = รหัสนักศึกษา | อาจารย์: username = ตั้งเอง
         const userData = {
           role: authRole,
-<<<<<<< HEAD
           username: identifier.trim(),
-=======
-          email: isStudent ? `${identifier}@utcc.ac.th` : identifier.trim(),
-          username: null,
-          studentId: isStudent ? identifier : null,
->>>>>>> 7c07554bb8fbe8640b79d8a0177f8bcbb64335cc
           password,
           fullName,
           faceDescriptor: faceDescriptor || [],
@@ -269,14 +263,8 @@ export default function Login() {
         switchMode('login');
 
       } else {
-<<<<<<< HEAD
         // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษาส่งรหัสนักศึกษาเป็น username)
         const loginData = { username: identifier.trim(), password };
-=======
-        const loginData = isStudent
-          ? { studentId: identifier, password }
-          : { email: identifier.trim(), password };
->>>>>>> 7c07554bb8fbe8640b79d8a0177f8bcbb64335cc
         const response = await authService.login(loginData);
 
         // รองรับ response structure หลายรูปแบบ

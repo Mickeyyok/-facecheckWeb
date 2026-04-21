@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { showSuccess, showError, showAlert } from '../../utils/alertPopup';
+import { showSuccess, showError, showAlert, showConfirm } from '../../utils/alertPopup';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock,
@@ -728,10 +728,17 @@ export default function TeacherCourseDetail() {
     setDateToDelete(null);
   };
 
-  const handleClearAllDates = () => {
-    if (window.confirm(`ลบวันทั้งหมด ${scheduledDates.length} วัน?`)) {
+  const handleClearAllDates = async () => {
+    const confirmed = await showConfirm(
+      'ยืนยันการลบทั้งหมด',
+      `คุณกำลังลบวันที่เปิดให้เช็คชื่อทั้ง ${scheduledDates.length} วัน การกระทำนี้ไม่สามารถย้อนกลับได้`,
+      'ลบทั้งหมด',
+      'ยกเลิก'
+    );
+    if (confirmed) {
       setScheduledDates([]);
       saveDatesToDB([]);
+      showSuccess('ลบเรียบร้อยแล้ว', 'วันเช็คชื่อทั้งหมดถูกลบแล้ว');
     }
   };
 

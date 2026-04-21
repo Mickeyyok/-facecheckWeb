@@ -52,6 +52,7 @@ export default function StudentHistory() {
     if (status === 'on_time' || status === 'present') return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
     if (status === 'late') return 'bg-amber-100 text-amber-700 border border-amber-200';
     if (status === 'absent') return 'bg-rose-100 text-rose-700 border border-rose-200';
+    if (status === 'leave') return 'bg-orange-100 text-orange-700 border border-orange-200';
     return 'bg-slate-100 text-slate-700 border border-slate-200';
   };
 
@@ -60,6 +61,7 @@ export default function StudentHistory() {
     if (status === 'on_time' || status === 'present') return 'ตรงเวลา';
     if (status === 'late') return 'สาย';
     if (status === 'absent') return 'ขาดเรียน';
+    if (status === 'leave') return 'ลา';
     return 'ไม่ทราบสถานะ';
   };
 
@@ -105,7 +107,7 @@ export default function StudentHistory() {
                 {history.map((item) => (
                   <tr
                     key={item.id}
-                    className={`transition-colors group ${isAbsent(item) ? 'bg-rose-50/30 hover:bg-rose-50/60' : 'hover:bg-slate-50/50'}`}
+                    className={`transition-colors group ${isAbsent(item) ? 'bg-rose-50/30 hover:bg-rose-50/60' : item.status?.toLowerCase() === 'leave' ? 'bg-orange-50/30 hover:bg-orange-50/60' : 'hover:bg-slate-50/50'}`}
                   >
                     <td className="p-5">
                       <div className={`font-extrabold text-[15px] mb-0.5 transition-colors ${isAbsent(item) ? 'text-rose-700' : 'text-slate-800 group-hover:text-[#2b4cdd]'}`}>

@@ -33,6 +33,7 @@ const StatusBadge = ({ status }) => {
   if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">✅ ตรงเวลา</span>;
   if (status === 'late') return <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">⚠️ สาย</span>;
   if (status === 'absent') return <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 border border-red-200">❌ ขาดเรียน</span>;
+  if (status === 'leave') return <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">📝 ลา</span>;
   return <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">- รอดำเนินการ</span>;
 };
 
@@ -53,8 +54,8 @@ export default function TeacherCourseDetail() {
   const [courseTimeSettings, setCourseTimeSettings] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
   const [editTimeForm, setEditTimeForm] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
 
-  const [maxAbsences, setMaxAbsences] = useState(4);
-  const [editMaxAbsences, setEditMaxAbsences] = useState(4);
+  const [maxAbsences, setMaxAbsences] = useState('');
+  const [editMaxAbsences, setEditMaxAbsences] = useState('');
 
   const [locationSettings, setLocationSettings] = useState({ name: '', lat: '', lng: '', radius: 50 });
   const [editLocationForm, setEditLocationForm] = useState(locationSettings);
@@ -169,7 +170,7 @@ export default function TeacherCourseDetail() {
           name: data.subjectName || '',
           code: data.subjectCode || '',
           room: data.room || '',
-          term: data.term || '2568 / 1',
+          term: data.term || '',
           instructor: data.instructorName || user?.fullName || user?.name || ''
         }));
 
@@ -193,9 +194,12 @@ export default function TeacherCourseDetail() {
           setEditTimeForm({ start, late: lateFmt, absent: absentFmt });
         }
 
-        if (data.maxAbsences !== undefined && data.maxAbsences !== null) {
+        if (data.maxAbsences && data.maxAbsences > 0) {
           setMaxAbsences(data.maxAbsences);
           setEditMaxAbsences(data.maxAbsences);
+        } else {
+          setMaxAbsences('');
+          setEditMaxAbsences('');
         }
 
         if (data.latitude && data.longitude) {
@@ -369,22 +373,24 @@ export default function TeacherCourseDetail() {
     present: dailyStudentRows.filter(s => ['present', 'on_time'].includes(s.attendanceStatus)).length,
     late: dailyStudentRows.filter(s => s.attendanceStatus === 'late').length,
     absent: dailyStudentRows.filter(s => s.attendanceStatus === 'absent').length,
+    leave: dailyStudentRows.filter(s => s.attendanceStatus === 'leave').length,
     pending: dailyStudentRows.filter(s => !s.attendanceStatus).length,
   };
 
-  const checkedCount = dailyStats.present + dailyStats.late + dailyStats.absent;
+  const checkedCount = dailyStats.present + dailyStats.late + dailyStats.absent + dailyStats.leave;
   const checkedPercent = dailyStats.total > 0 ? Math.round((checkedCount / dailyStats.total) * 100) : 0;
 
   const filteredDailyRows = dailyFilter === 'all' ? dailyStudentRows : dailyStudentRows.filter(r => {
     if (dailyFilter === 'present') return ['present', 'on_time'].includes(r.attendanceStatus);
     if (dailyFilter === 'late') return r.attendanceStatus === 'late';
     if (dailyFilter === 'absent') return r.attendanceStatus === 'absent';
+    if (dailyFilter === 'leave') return r.attendanceStatus === 'leave';
     if (dailyFilter === 'pending') return !r.attendanceStatus;
     return true;
   });
 
   const exportDailyCSV = () => {
-    const statusLabel = (s) => ['present', 'on_time'].includes(s) ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : 'รอดำเนินการ';
+    const statusLabel = (s) => ['present', 'on_time'].includes(s) ? 'ตรงเวลา' : s === 'late' ? 'สาย' : s === 'absent' ? 'ขาดเรียน' : s === 'leave' ? 'ลา' : 'รอดำเนินการ';
     const header = 'ลำดับ,รหัสนักศึกษา,ชื่อ-สกุล,เวลาเช็คชื่อ,สถานะ';
     const rows = filteredDailyRows.map((r, i) => `${i + 1},${r.studentId || '-'},${r.name},${r.checkedTime},${statusLabel(r.attendanceStatus)}`);
     const csvContent = '\uFEFF' + [header, ...rows].join('\n');
@@ -540,12 +546,12 @@ export default function TeacherCourseDetail() {
         startTime: editTimeForm.start,
         endTime: editTimeForm.absent,
         lateThresholdMinutes: lateThreshold,
-        maxAbsences: parseInt(editMaxAbsences)
+        maxAbsences: editMaxAbsences ? parseInt(editMaxAbsences) : 0
       };
 
       await classService.updateClass(courseId, payload);
       setCourseTimeSettings(editTimeForm);
-      setMaxAbsences(parseInt(editMaxAbsences));
+      setMaxAbsences(editMaxAbsences ? parseInt(editMaxAbsences) : '');
       setShowSetTimeModal(false);
       showSuccess("บันทึกเวลาเรียบร้อยแล้ว!");
     } catch (error) {
@@ -828,14 +834,43 @@ export default function TeacherCourseDetail() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {['name', 'code', 'instructor', 'room', 'term'].map(field => (
+                      {['name', 'code', 'instructor', 'room'].map(field => (
                         <div key={field}>
                           <label className="text-slate-500 block mb-1.5 text-xs font-bold uppercase tracking-wide">
-                            {field === 'name' ? 'ชื่อวิชา' : field === 'code' ? 'รหัสวิชา' : field === 'instructor' ? 'ชื่ออาจารย์' : field === 'room' ? 'ห้องเรียน' : 'ปีการศึกษา / เทอม'}
+                            {field === 'name' ? 'ชื่อวิชา' : field === 'code' ? 'รหัสวิชา' : field === 'instructor' ? 'ชื่ออาจารย์' : 'ห้องเรียน'}
                           </label>
                           <input type="text" value={editCourseForm[field]} onChange={(e) => setEditCourseForm({ ...editCourseForm, [field]: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm" />
                         </div>
                       ))}
+                      <div>
+                        <label className="text-slate-500 block mb-1.5 text-xs font-bold uppercase tracking-wide">
+                          ปีการศึกษา / เทอม
+                        </label>
+                        <div className="flex space-x-2">
+                          <input 
+                            type="number" 
+                            placeholder="ปี เช่น 2568" 
+                            value={editCourseForm.term ? editCourseForm.term.split(' / ')[0] : ''} 
+                            onChange={(e) => {
+                              const t = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1';
+                              setEditCourseForm({ ...editCourseForm, term: `${e.target.value} / ${t}` });
+                            }} 
+                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm" 
+                          />
+                          <select 
+                            value={editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1'} 
+                            onChange={(e) => {
+                              const y = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[0] : '';
+                              setEditCourseForm({ ...editCourseForm, term: `${y} / ${e.target.value}` });
+                            }} 
+                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm"
+                          >
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">ฤดูร้อน</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1116,11 +1151,13 @@ export default function TeacherCourseDetail() {
                       {dailyStats.present > 0 && <div className="bg-green-500 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.present / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.present}</span></div>}
                       {dailyStats.late > 0 && <div className="bg-yellow-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.late / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.late}</span></div>}
                       {dailyStats.absent > 0 && <div className="bg-red-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.absent / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.absent}</span></div>}
+                      {dailyStats.leave > 0 && <div className="bg-orange-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.leave / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.leave}</span></div>}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-2.5 text-[10px] sm:text-xs font-medium text-slate-500">
                       <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded"></div> ตรงเวลา ({dailyStats.present})</span>
                       <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-400 rounded"></div> สาย ({dailyStats.late})</span>
                       <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-400 rounded"></div> ขาดเรียน ({dailyStats.absent})</span>
+                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-orange-400 rounded"></div> ลา ({dailyStats.leave})</span>
                       <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-slate-200 rounded border border-slate-300"></div> รอ ({dailyStats.pending})</span>
                     </div>
                   </div>
@@ -1131,11 +1168,12 @@ export default function TeacherCourseDetail() {
                     {[1, 2, 3, 4].map(i => <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 text-center animate-pulse"><div className="h-3 w-20 bg-slate-100 rounded mx-auto mb-3"></div><div className="h-8 w-12 bg-slate-100 rounded mx-auto"></div></div>)}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
                     <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ทั้งหมด</p><p className="text-2xl sm:text-3xl font-bold text-slate-800">{dailyStats.total}</p></div>
                     <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-[10px] sm:text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-2xl sm:text-3xl font-bold text-green-600">{dailyStats.present}</p></div>
                     <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-[10px] sm:text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-2xl sm:text-3xl font-bold text-yellow-600">{dailyStats.late}</p></div>
                     <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-2xl sm:text-3xl font-bold text-red-500">{dailyStats.absent}</p></div>
+                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-orange-500 text-center"><p className="text-orange-500 text-[10px] sm:text-xs font-bold uppercase mb-1">การลา</p><p className="text-2xl sm:text-3xl font-bold text-orange-500">{dailyStats.leave}</p></div>
                   </div>
                 )}
 
@@ -1152,9 +1190,10 @@ export default function TeacherCourseDetail() {
                         { key: 'present', label: 'ตรงเวลา', count: dailyStats.present, color: 'green' },
                         { key: 'late', label: 'สาย', count: dailyStats.late, color: 'yellow' },
                         { key: 'absent', label: 'ขาดเรียน', count: dailyStats.absent, color: 'red' },
+                        { key: 'leave', label: 'ลา', count: dailyStats.leave, color: 'orange' },
                         { key: 'pending', label: 'รอดำเนินการ', count: dailyStats.pending, color: 'gray' },
                       ].map(f => (
-                        <button key={f.key} onClick={() => setDailyFilter(f.key)} className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${dailyFilter === f.key ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300' : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300' : f.color === 'gray' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <button key={f.key} onClick={() => setDailyFilter(f.key)} className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${dailyFilter === f.key ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300' : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300' : f.color === 'orange' ? 'bg-orange-50 text-orange-600 border-orange-300' : f.color === 'gray' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
                           {f.label} <span className="ml-1 opacity-70">({f.count})</span>
                         </button>
                       ))}
@@ -1331,7 +1370,7 @@ export default function TeacherCourseDetail() {
               
               <div className="pt-2 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-700 mb-1">ขาดเรียนได้สูงสุด (ครั้ง)</label>
-                <input type="number" min="1" max="10" value={editMaxAbsences} onChange={(e) => setEditMaxAbsences(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" min="1" max="99" placeholder="ไม่มีกำหนด" value={editMaxAbsences} onChange={(e) => setEditMaxAbsences(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-normal" />
                 <p className="text-[10px] text-slate-500 mt-1">AI จะแจ้งเตือนนักศึกษาเมื่อขาดเรียนใกล้หรือเกินเกณฑ์นี้</p>
               </div>
             </div>

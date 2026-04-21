@@ -27,6 +27,7 @@ export default function TeacherDashboard() {
     startTime: '09:00',
     endTime: '12:00',
     lateThresholdMinutes: 15,
+    maxAbsences: '',
     academicYear: new Date().getFullYear() + 543, // ปีปัจจุบัน (พ.ศ.)
     termSemester: '1',
   });
@@ -73,6 +74,7 @@ export default function TeacherDashboard() {
         startTime: newClass.startTime,
         endTime: newClass.endTime,
         lateThresholdMinutes: newClass.lateThresholdMinutes,
+        maxAbsences: newClass.maxAbsences ? parseInt(newClass.maxAbsences) : 0,
         term: `${newClass.academicYear} / ${newClass.termSemester}`,
       });
 
@@ -85,6 +87,7 @@ export default function TeacherDashboard() {
         startTime: '09:00',
         endTime: '12:00',
         lateThresholdMinutes: 15,
+        maxAbsences: '',
         academicYear: new Date().getFullYear() + 543,
         termSemester: '1',
       });
@@ -315,8 +318,8 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              {/* Row 4: เวลา & เกณฑ์สาย */}
-              <div className="grid grid-cols-3 gap-4">
+              {/* Row 4: เวลา & เกณฑ์สาย & เกณฑ์ขาดเรียน */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">เวลาเริ่ม</label>
                   <input
@@ -344,6 +347,18 @@ export default function TeacherDashboard() {
                     value={newClass.lateThresholdMinutes}
                     onChange={(e) => setNewClass({ ...newClass, lateThresholdMinutes: parseInt(e.target.value) || 15 })}
                     className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">ขาดเรียนได้ <span className="lowercase text-[9px] font-medium">(ครั้ง)</span></label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    placeholder="ไม่มีกำหนด"
+                    value={newClass.maxAbsences}
+                    onChange={(e) => setNewClass({ ...newClass, maxAbsences: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 placeholder:text-slate-400 placeholder:font-normal"
                   />
                 </div>
               </div>

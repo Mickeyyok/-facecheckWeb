@@ -27,6 +27,8 @@ export default function TeacherDashboard() {
     startTime: '09:00',
     endTime: '12:00',
     lateThresholdMinutes: 15,
+    academicYear: new Date().getFullYear() + 543, // ปีปัจจุบัน (พ.ศ.)
+    termSemester: '1',
   });
 
   // ============================================
@@ -71,6 +73,7 @@ export default function TeacherDashboard() {
         startTime: newClass.startTime,
         endTime: newClass.endTime,
         lateThresholdMinutes: newClass.lateThresholdMinutes,
+        term: `${newClass.academicYear} / ${newClass.termSemester}`,
       });
 
       // รีเซ็ตฟอร์มและปิด Modal
@@ -82,6 +85,8 @@ export default function TeacherDashboard() {
         startTime: '09:00',
         endTime: '12:00',
         lateThresholdMinutes: 15,
+        academicYear: new Date().getFullYear() + 543,
+        termSemester: '1',
       });
       setShowCreateClassModal(false);
 
@@ -150,10 +155,10 @@ export default function TeacherDashboard() {
               placeholder="ค้นหารายวิชา..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
-          <button onClick={() => setShowCreateClassModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">
+          <button onClick={() => setShowCreateClassModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-blue-700 transition shadow-sm w-full sm:w-auto">
             <Plus size={16} /><span>สร้างคลาส</span>
           </button>
         </div>
@@ -162,7 +167,7 @@ export default function TeacherDashboard() {
       {/* Loading State */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader2 className="animate-spin text-purple-500" size={36} />
+          <Loader2 className="animate-spin text-blue-500" size={36} />
           <span className="ml-3 text-slate-500">กำลังโหลดข้อมูล...</span>
         </div>
       ) : filteredCourses.length === 0 ? (
@@ -182,10 +187,10 @@ export default function TeacherDashboard() {
                 <div className="flex justify-between items-start mb-3 sm:mb-4">
                   <div className="flex flex-col items-start min-w-0 pr-2">
                     <span className="text-[10px] font-bold px-2 py-1 rounded-md mb-2 uppercase border bg-slate-50 text-slate-500 border-slate-200">
-                      {course.scheduleDay || 'ยังไม่ระบุวัน'}
+                      {course.scheduleDay || 'ยังไม่ระบุวัน'} {course.term && `• เทอม ${course.term}`}
                     </span>
                     <h4 className="text-lg sm:text-xl font-bold text-slate-800 leading-tight truncate w-full">{course.subjectName}</h4>
-                    <span className="text-xs sm:text-sm font-semibold text-purple-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
+                    <span className="text-xs sm:text-sm font-semibold text-blue-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
                   </div>
                   <button onClick={() => setClassToDelete(course)} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition shrink-0" title="ลบคลาส"><Trash2 size={16} className="sm:hidden" /><Trash2 size={18} className="hidden sm:block" /></button>
                 </div>
@@ -201,7 +206,7 @@ export default function TeacherDashboard() {
                 <span className="text-[10px] sm:text-xs text-slate-500 font-medium bg-white px-2 py-1 border border-slate-200 rounded">เกณฑ์: สายหลัง {course.lateThresholdMinutes || 15} นาที</span>
                 <button 
                   onClick={() => navigate(`/teacher/course/${course.id}`)} 
-                  className="text-purple-600 text-xs sm:text-sm font-bold flex items-center hover:text-purple-800 transition"
+                  className="text-blue-600 text-xs sm:text-sm font-bold flex items-center hover:text-blue-800 transition"
                 >
                   จัดการคลาส <ChevronRight size={14} className="sm:hidden ml-0.5"/><ChevronRight size={16} className="hidden sm:block ml-1"/>
                 </button>
@@ -215,95 +220,141 @@ export default function TeacherDashboard() {
       
       {/* Modal Create Class */}
       {showCreateClassModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
-            <button onClick={() => setShowCreateClassModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">สร้างคลาสใหม่</h3>
-            <div className="space-y-3 mb-6">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">รหัสวิชา *</label>
-                <input
-                  type="text"
-                  placeholder="เช่น SP344"
-                  value={newClass.subjectCode}
-                  onChange={(e) => setNewClass({ ...newClass, subjectCode: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl shadow-blue-900/10 relative p-8 sm:p-10 animate-in zoom-in-95 duration-200 border border-white/20">
+            <button 
+              onClick={() => setShowCreateClassModal(false)} 
+              className="absolute top-6 right-6 text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-all z-10"
+            >
+              <XCircle size={24} />
+            </button>
+            
+            <div className="mb-8">
+              <h3 className="text-2xl font-black bg-gradient-to-r from-blue-700 to-indigo-600 bg-clip-text text-transparent inline-block">สร้างคลาสใหม่</h3>
+              <p className="text-slate-500 text-sm mt-1 font-medium">กรอกข้อมูลรายวิชาที่คุณต้องการเปิดสอน</p>
+            </div>
+            
+            <div className="space-y-4 mb-8">
+              {/* Row 1: รหัสวิชา & ชื่อวิชา */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">รหัสวิชา *</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น SP344"
+                    value={newClass.subjectCode}
+                    onChange={(e) => setNewClass({ ...newClass, subjectCode: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">ชื่อวิชา *</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น Software Engineering"
+                    value={newClass.subjectName}
+                    onChange={(e) => setNewClass({ ...newClass, subjectName: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">ชื่อวิชา *</label>
-                <input
-                  type="text"
-                  placeholder="เช่น Software Engineering"
-                  value={newClass.subjectName}
-                  onChange={(e) => setNewClass({ ...newClass, subjectName: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">ห้องเรียน</label>
-                <input
-                  type="text"
-                  placeholder="เช่น 21509"
-                  value={newClass.room}
-                  onChange={(e) => setNewClass({ ...newClass, room: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">วันเรียน</label>
-                <select
-                  value={newClass.scheduleDay}
-                  onChange={(e) => setNewClass({ ...newClass, scheduleDay: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="จันทร์">จันทร์</option>
-                  <option value="อังคาร">อังคาร</option>
-                  <option value="พุธ">พุธ</option>
-                  <option value="พฤหัสบดี">พฤหัสบดี</option>
-                  <option value="ศุกร์">ศุกร์</option>
-                  <option value="เสาร์">เสาร์</option>
-                  <option value="อาทิตย์">อาทิตย์</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              {/* Row 2: ห้องเรียน & วันเรียน */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">เวลาเริ่ม</label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">ห้องเรียน</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น 21509"
+                    value={newClass.room}
+                    onChange={(e) => setNewClass({ ...newClass, room: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">วันเรียน</label>
+                  <select
+                    value={newClass.scheduleDay}
+                    onChange={(e) => setNewClass({ ...newClass, scheduleDay: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
+                  >
+                    <option value="จันทร์">จันทร์</option>
+                    <option value="อังคาร">อังคาร</option>
+                    <option value="พุธ">พุธ</option>
+                    <option value="พฤหัสบดี">พฤหัสบดี</option>
+                    <option value="ศุกร์">ศุกร์</option>
+                    <option value="เสาร์">เสาร์</option>
+                    <option value="อาทิตย์">อาทิตย์</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: ปีการศึกษา & เทอม */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">ปีการศึกษา</label>
+                  <input
+                    type="number"
+                    placeholder="เช่น 2567"
+                    value={newClass.academicYear}
+                    onChange={(e) => setNewClass({ ...newClass, academicYear: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">เทอม</label>
+                  <select
+                    value={newClass.termSemester}
+                    onChange={(e) => setNewClass({ ...newClass, termSemester: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
+                  >
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">ฤดูร้อน</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 4: เวลา & เกณฑ์สาย */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">เวลาเริ่ม</label>
                   <input
                     type="time"
                     value={newClass.startTime}
                     onChange={(e) => setNewClass({ ...newClass, startTime: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">เวลาสิ้นสุด</label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">เวลาสิ้นสุด</label>
                   <input
                     type="time"
                     value={newClass.endTime}
                     onChange={(e) => setNewClass({ ...newClass, endTime: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">เกณฑ์สาย <span className="lowercase text-[9px] font-medium">(นาที)</span></label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={newClass.lateThresholdMinutes}
+                    onChange={(e) => setNewClass({ ...newClass, lateThresholdMinutes: parseInt(e.target.value) || 15 })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">เกณฑ์สาย (นาที)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={newClass.lateThresholdMinutes}
-                  onChange={(e) => setNewClass({ ...newClass, lateThresholdMinutes: parseInt(e.target.value) || 15 })}
-                  className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
             </div>
+            
             <button
               onClick={handleCreateClass}
               disabled={saving}
-              className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-bold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold tracking-wide shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center text-[15px]"
             >
-              {saving ? <><Loader2 size={18} className="animate-spin mr-2" /> กำลังบันทึก...</> : 'ยืนยันสร้างคลาส'}
+              {saving ? <><Loader2 size={20} className="animate-spin mr-2" /> กำลังบันทึกข้อมูล...</> : 'ยืนยันสร้างคลาสเรียน'}
             </button>
           </div>
         </div>

@@ -84,9 +84,6 @@ export default function TeacherCourseDetail() {
   const [loadingTerm, setLoadingTerm] = useState(false);
   const [riskAlerts, setRiskAlerts] = useState([]);
 
-  // --- สถานะยกเลิกคลาส ---
-  const [isClassCanceled, setIsClassCanceled] = useState(false);
-
   // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
   const [nowTime, setNowTime] = useState(new Date());
   useEffect(() => {
@@ -94,6 +91,7 @@ export default function TeacherCourseDetail() {
     return () => clearInterval(timer);
   }, []);
 
+  const [isClassCanceled, setIsClassCanceled] = useState(false);
   const getScanStatus = () => {
     // ✅ ถ้ายกเลิกคลาสแล้ว ปิดสแกนทันที
     if (isClassCanceled) return { isOpen: false, label: '❌ ยกเลิกคลาสวันนี้แล้ว' };
@@ -116,7 +114,6 @@ export default function TeacherCourseDetail() {
   };
   const scanStatus = getScanStatus();
 
-  // isClassCanceled ถูกย้ายไปประกาศด้านบน (ก่อน getScanStatus)
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showAddDateModal, setShowAddDateModal] = useState(false);
   const [newDateForm, setNewDateForm] = useState({ date: '', note: '' });
@@ -842,7 +839,6 @@ export default function TeacherCourseDetail() {
                 {/* สถานะสแกน real-time */}
                 <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-5 ${scanStatus.isOpen ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
                   <div className={`w-2.5 h-2.5 rounded-full ${scanStatus.isOpen ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-400'}`}></div>
-                  <Clock size={14} />
                   <span>{scanStatus.label}</span>
                 </div>
 
@@ -858,7 +854,7 @@ export default function TeacherCourseDetail() {
                       </div>
                       <div className="flex flex-wrap gap-2.5 w-full lg:w-auto">
                         <button onClick={() => { setGenerateForm({ selectedDays: [], startDate: '', endDate: '' }); setShowGenerateModal(true); }} className="text-sm bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition shadow-sm flex items-center justify-center min-w-[170px]">
-                          <Sparkles size={15} className="mr-2" /> สร้างตารางอัตโนมัติ
+                          สร้างตารางอัตโนมัติ
                         </button>
                         <button onClick={() => { setNewDateForm({ date: '', note: '' }); setShowAddDateModal(true); }} className="text-sm bg-white text-indigo-600 border border-indigo-200 font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-50 transition shadow-sm flex items-center justify-center min-w-[140px]">
                           <Plus size={15} className="mr-1.5" /> เพิ่มวันเดี่ยว
@@ -1163,7 +1159,7 @@ export default function TeacherCourseDetail() {
               <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
-                  <div className="flex items-center space-x-2 sm:space-x-3"><div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0"><Sparkles size={18} className="sm:hidden fill-indigo-50" /><Sparkles size={22} className="hidden sm:block fill-indigo-50" /></div><h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
+                  <div className="flex items-center space-x-2 sm:space-x-3"><div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0"></div><h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
                   <span className="flex items-center bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-[10px] sm:text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full shadow-md self-start sm:self-auto shrink-0"><Brain size={12} className="mr-1 sm:hidden" /><Brain size={14} className="mr-1.5 hidden sm:block" /> วิเคราะห์โดย AI</span>
                 </div>
                 {loadingTerm ? (
@@ -1200,7 +1196,7 @@ export default function TeacherCourseDetail() {
                       {termStats.filter(s => s.absentCount > 0).length === 0 && (
                         <div className="text-center py-6">
                           <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2" />
-                          <p className="text-slate-600 font-bold">ไม่มีนักศึกษาที่ขาดเรียนเลย 🎉</p>
+                          <p className="text-slate-600 font-bold">ไม่มีนักศึกษาที่ขาดเรียน</p>
                         </div>
                       )}
                     </div>
@@ -1267,9 +1263,9 @@ export default function TeacherCourseDetail() {
                       </div>
                       <div className="flex items-center mt-4">
                         {alert.status === 'pending' ? (
-                          <button onClick={() => openAlertModal(alert)} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center w-full justify-center"><Sparkles size={14} className="mr-1.5 text-amber-500" /> ร่างข้อความแจ้งเตือนเข้าแอป</button>
+                          <button onClick={() => openAlertModal(alert)} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center w-full justify-center"> ส่งแจ้งเตือนเข้าระบบนักศึกษา</button>
                         ) : (
-                          <span className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg font-bold flex items-center w-full justify-center"><CheckCircle size={16} className="mr-1.5" /> ส่งแจ้งเตือนเข้าระบบสำเร็จแล้ว</span>
+                          <span className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg font-bold flex items-center w-full justify-center"><CheckCircle size={16} className="mr-1.5" /> ส่งแจ้งเตือนเข้าระบบ</span>
                         )}
                       </div>
                       <div className="absolute top-4 right-4">
@@ -1289,7 +1285,7 @@ export default function TeacherCourseDetail() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Clock className="mr-2 text-blue-600" size={20} /> กำหนดเวลา</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">กำหนดเวลา</h3>
             <div className="space-y-3 mb-6">
               <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({ ...editTimeForm, start: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
               <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({ ...editTimeForm, late: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
@@ -1624,7 +1620,7 @@ export default function TeacherCourseDetail() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
             <button onClick={() => setShowGenerateModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center"><Sparkles size={20} className="mr-2 text-indigo-600" /> สร้างตารางเช็คชื่ออัตโนมัติ</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center"> สร้างตารางเช็คชื่ออัตโนมัติ</h3>
             <p className="text-sm text-slate-500 mb-6">เลือกวันในสัปดาห์ที่มีคลาส และกำหนดช่วงเทอม ระบบจะสร้างวันเช็คชื่อให้ทั้งหมด</p>
             <div className="mb-5">
               <label className="block text-xs font-bold text-slate-700 mb-2.5 uppercase tracking-wide">เลือกวันในสัปดาห์ที่มีคลาสเรียน *</label>
@@ -1640,7 +1636,7 @@ export default function TeacherCourseDetail() {
             </div>
             <div className="flex space-x-3">
               <button onClick={() => setShowGenerateModal(false)} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
-              <button onClick={handleGenerateDates} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center"><Sparkles size={16} className="mr-2" /> สร้างตาราง</button>
+              <button onClick={handleGenerateDates} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center"> สร้างตาราง</button>
             </div>
           </div>
         </div>

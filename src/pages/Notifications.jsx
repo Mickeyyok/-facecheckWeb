@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle, FileText, CheckCircle2, X, Clock, Loader2 } from 'lucide-react';
+  import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle, FileText, CheckCircle2, X, Loader2 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../services/notificationService';
@@ -178,15 +178,16 @@ export default function Notifications({ role }) {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('notifications')}
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-200 ${
               activeTab === 'notifications'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
-                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-100'
+                : 'bg-white text-slate-500 border border-slate-200 hover:border-purple-300 hover:text-purple-600'
             }`}
           >
-            📬 แจ้งเตือน
+            <Mail size={18} />
+            <span>แจ้งเตือน</span>
             {notifications.filter(n => !n.isRead).length > 0 && (
-              <span className={`ml-2 text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              <span className={`ml-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
                 activeTab === 'notifications' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-600'
               }`}>
                 {notifications.filter(n => !n.isRead).length}
@@ -195,15 +196,16 @@ export default function Notifications({ role }) {
           </button>
           <button
             onClick={() => setActiveTab('leave-requests')}
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-200 ${
               activeTab === 'leave-requests'
-                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25'
-                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                ? 'bg-amber-500 text-white shadow-md shadow-amber-100'
+                : 'bg-white text-slate-500 border border-slate-200 hover:border-amber-300 hover:text-amber-600'
             }`}
           >
-            📋 คำขอลา
+            <FileText size={18} />
+            <span>คำขอลา</span>
             {pendingLeaveCount > 0 && (
-              <span className={`ml-2 text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              <span className={`ml-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
                 activeTab === 'leave-requests' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-600'
               }`}>
                 {pendingLeaveCount}
@@ -323,7 +325,7 @@ export default function Notifications({ role }) {
                           <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
                             isSick ? 'bg-rose-50' : 'bg-blue-50'
                           }`}>
-                            {isSick ? '🏥' : '📋'}
+                            {isSick ? <AlertTriangle size={20} className="text-rose-500" /> : <FileText size={20} className="text-blue-500" />}
                           </div>
                           <div>
                             <h4 className="font-bold text-slate-800 text-[15px]">{lr.studentName}</h4>
@@ -341,7 +343,7 @@ export default function Notifications({ role }) {
                             isApproved ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                             'bg-rose-50 text-rose-600 border-rose-200'
                           }`}>
-                            {isPending ? '⏳ รออนุมัติ' : isApproved ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธแล้ว'}
+                            {isPending ? 'รออนุมัติ' : isApproved ? 'อนุมัติแล้ว' : <><XCircle size={12} className="mr-1" /> ปฏิเสธแล้ว</>}
                           </span>
                         </div>
                       </div>
@@ -349,7 +351,6 @@ export default function Notifications({ role }) {
                       {/* Details */}
                       <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-3">
                         <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
-                          <Clock size={14} className="text-slate-400" />
                           <span className="font-semibold">วันที่ลา:</span>
                           <span className="font-bold text-slate-800">{formatLeaveDate(lr.leaveDate)}</span>
                         </div>
@@ -361,7 +362,7 @@ export default function Notifications({ role }) {
                         )}
                         {lr.attachmentImage && (
                           <div className="mt-3 pt-3 border-t border-slate-100">
-                            <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">📎 เอกสารแนบ</p>
+                            <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><FileText size={14} className="text-slate-400" /> เอกสารแนบ</p>
                             <img
                               src={lr.attachmentImage}
                               alt="เอกสารแนบ"
@@ -388,7 +389,7 @@ export default function Notifications({ role }) {
                             disabled={processingLeaveId === lr.id}
                             className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95 shadow-md shadow-emerald-500/20 text-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
                           >
-                            {processingLeaveId === lr.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                            {processingLeaveId === lr.id ? <Loader2 size={16} className="animate-spin" /> : null}
                             อนุมัติ
                           </button>
                         </div>

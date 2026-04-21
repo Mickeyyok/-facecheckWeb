@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, Clock, X, Calendar, AlertOctagon, FileText, Send, Loader2, Upload, ImageIcon } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, AlertTriangle, XCircle, Brain, Bell, X, Calendar, AlertOctagon, FileText, Send, Loader2, Upload, ImageIcon } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { useAuth } from '../../context/AuthContext';
 import { attendanceService } from '../../services/attendanceService';
@@ -223,8 +223,8 @@ export default function StudentDashboard() {
   };
 
   const aiAnalysis = ((absentCount) => {
-    if (absentCount >= 4) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: '🚨 ตัดสิทธิ์สอบ!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง เกินเกณฑ์แล้ว` };
-    if (absentCount === 3) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: '⚠️ AI Warning: เสี่ยงหมดสิทธิ์สอบ!', msg: 'ขาดเรียน 3 ครั้งแล้ว ระวังถูกตัดสิทธิ์สอบ' };
+    if (absentCount >= 4) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: 'ตัดสิทธิ์สอบ!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง เกินเกณฑ์แล้ว` };
+    if (absentCount === 3) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: 'AI Warning: เสี่ยงหมดสิทธิ์สอบ!', msg: 'ขาดเรียน 3 ครั้งแล้ว ระวังถูกตัดสิทธิ์สอบ' };
     return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'AI Suggestion', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
   })(classStats.absent);
 
@@ -240,7 +240,7 @@ export default function StudentDashboard() {
         leaveType: leaveForm.leaveType,
         leaveDate: leaveForm.leaveDate,
         reason: leaveForm.reason,
-        attachmentImage: attachmentImage,
+        attachmentImage: attachmentImage || "", // ส่งค่าว่างแทน null เพื่อป้องกัน Backend Error (NPE)
       });
       showSuccess('ส่งใบลาเรียบร้อย!', 'ระบบส่งคำขอไปยังอาจารย์ผู้สอนแล้ว');
       setShowLeaveModal(false);
@@ -341,7 +341,6 @@ export default function StudentDashboard() {
                 // ถ้ายังไม่ถึงเวลาเริ่มเรียน
                 if (nowMin < startMin) return (
                   <div className="bg-amber-500/20 text-amber-200 px-8 py-4 rounded-xl font-extrabold flex items-center justify-center space-x-2.5 border border-amber-500/30 w-fit">
-                    <Clock size={20} className="animate-pulse" />
                     <span>ยังไม่ถึงเวลาเรียน ({activeCourse.startTime} น.)</span>
                   </div>
                 );
@@ -417,7 +416,7 @@ export default function StudentDashboard() {
                     </div>
                     <div className="flex flex-col gap-2 text-[13px] text-slate-500 font-medium">
                       <div className="flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-200/60 text-slate-600 w-fit"><Calendar size={13} className="mr-1.5"/>{getThaiDay(course.scheduleDay)}</div>
-                      <span className="flex items-center ml-1"><Clock size={14} className="mr-2 text-slate-400"/> {course.startTime?.substring(0,5)} - {course.endTime?.substring(0,5)}</span>
+                      <span className="flex items-center ml-1">{course.startTime?.substring(0,5)} - {course.endTime?.substring(0,5)}</span>
                     </div>
                   </div>
                 );
@@ -450,23 +449,23 @@ export default function StudentDashboard() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setLeaveForm(f => ({ ...f, leaveType: 'sick' }))}
-                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${
                       leaveForm.leaveType === 'sick'
                         ? 'bg-rose-50 border-rose-300 text-rose-600 shadow-sm'
                         : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
                   >
-                    🏥 ลาป่วย
+                    <AlertTriangle size={18} /> ลาป่วย
                   </button>
                   <button
                     onClick={() => setLeaveForm(f => ({ ...f, leaveType: 'personal' }))}
-                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${
                       leaveForm.leaveType === 'personal'
                         ? 'bg-blue-50 border-blue-300 text-blue-600 shadow-sm'
                         : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
                   >
-                    📋 ลากิจ
+                    <FileText size={18} /> ลากิจ
                   </button>
                 </div>
               </div>

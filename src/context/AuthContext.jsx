@@ -7,32 +7,46 @@ export const AuthProvider = ({ children }) => {
     try {
       const savedUser = localStorage.getItem('user');
       return savedUser ? JSON.parse(savedUser) : null;
-    } catch (error) {
+    } catch {
       return null;
     }
   });
 
+  /**
+   * login(userData, tokenData)
+   * - รองรับ backend ที่ส่ง token มาใน field ชื่อ 'token' หรือ 'accessToken'
+   * - ตัด faceDescriptor ออกก่อนเซฟ (ป้องกัน localStorage เกิน 5MB)
+   */
   const login = (userData, tokenData) => {
-    // 1. 💡 ป้องกัน Local Storage พัง: คัดลอกข้อมูล User และลบ faceDescriptor ทิ้งก่อนเซฟ
     const { faceDescriptor, ...cleanUserData } = userData;
 
-    // 2. เซฟข้อมูลที่สะอาดแล้วลง State และ LocalStorage
     setUser(cleanUserData);
     localStorage.setItem('user', JSON.stringify(cleanUserData));
-    
-    // 3. สร้าง Token จำลองเพื่อให้ App.jsx ยอมให้ผ่าน
-    localStorage.setItem('token', tokenData || 'dummy-auth-token');
+
+    // รองรับทั้ง field 'token' และ 'accessToken' จาก backend
+    const resolvedToken =
+      tokenData?.token || tokenData?.accessToken || tokenData;
+
+    if (resolvedToken && resolvedToken !== 'undefined') {
+      localStorage.setItem('token', resolvedToken);
+    } else {
+      // ไม่มี token จริง → ลบทิ้งเพื่อไม่ให้ส่ง header ผิด
+      localStorage.removeItem('token');
+      console.warn('[AuthContext] ไม่พบ JWT token จาก backend');
+    }
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    window.location.href = '/login'; 
+    window.location.href = '/';
   };
 
+  const isAuthenticated = !!user && !!localStorage.getItem('token');
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

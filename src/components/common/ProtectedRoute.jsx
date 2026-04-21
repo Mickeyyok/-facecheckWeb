@@ -4,17 +4,19 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function ProtectedRoute({ allowedRole }) {
   const { user } = useAuth();
+  const token = localStorage.getItem('token');
 
-  // 1. ถ้ายังไม่ล็อกอิน ให้เด้งกลับไปหน้าแรก (Login)
-  if (!user) {
+  // 1. ไม่มี user หรือไม่มี token → กลับ login
+  if (!user || !token) {
     return <Navigate to="/" replace />;
   }
 
-  // 2. ถ้าล็อกอินแล้ว แต่พยายามเข้าหน้าของ Role อื่น (เช่น นักศึกษาพยายามเข้าหน้าอาจารย์)
+  // 2. เข้า role ที่ไม่ใช่ตัวเอง → เด้งไปหน้าของตัวเอง
   if (allowedRole && user.role !== allowedRole) {
-    return <Navigate to={`/${user.role}/dashboard`} replace />; // เด้งกลับไปหน้าตัวเอง
+    const home = user.role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard';
+    return <Navigate to={home} replace />;
   }
 
-  // 3. ผ่านด่านทั้งหมด ให้แสดงหน้าเว็บนั้นได้ตามปกติ
+  // 3. ผ่านทุกเงื่อนไข
   return <Outlet />;
 }

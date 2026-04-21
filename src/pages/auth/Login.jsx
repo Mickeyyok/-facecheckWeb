@@ -211,8 +211,8 @@ export default function Login() {
       if (!fullName.trim()) return 'กรุณากรอกชื่อ - นามสกุล';
       if (isStudent && !STUDENT_ID_RE.test(identifier))
         return 'รหัสนักศึกษาต้องเป็นตัวเลข 13 หลัก';
-      if (!isStudent && !EMAIL_RE.test(identifier))
-        return 'รูปแบบอีเมลไม่ถูกต้อง';
+      if (!isStudent && identifier.trim().length < 3)
+        return 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร';
       if (password.length < 8) return 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';
       if (password !== confirmPassword) return 'รหัสผ่านไม่ตรงกัน';
       if (isStudent && !isFaceRegistered) return 'กรุณาลงทะเบียนใบหน้าให้ครบ 4 มุม';
@@ -220,8 +220,6 @@ export default function Login() {
       // login validation
       if (isStudent && identifier && !STUDENT_ID_RE.test(identifier))
         return 'รหัสนักศึกษาต้องเป็นตัวเลข 13 หลัก';
-      if (!isStudent && identifier.trim().length > 0 && !EMAIL_RE.test(identifier))
-        return 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     return null;
   };
@@ -351,16 +349,17 @@ export default function Login() {
               {/* รหัสนักศึกษา / username */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-600 ml-1">
-                  {authRole === 'student' ? 'รหัสนักศึกษา' : 'อีเมล (Email)'}
+                  {authRole === 'student' ? 'รหัสนักศึกษา' : 'ชื่อผู้ใช้ (Username)'}
                 </label>
                 <input
-                  type={authRole === 'student' ? 'text' : 'email'}
+                  type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={authRole === 'student' ? 'ระบุ 13 หลัก' : 'เช่น teacher@utcc.ac.th'}
+                  placeholder={authRole === 'student' ? 'ระบุ 13 หลัก' : 'เช่น teacher01'}
                   required
-                  inputMode={authRole === 'student' ? 'numeric' : 'email'}
+                  inputMode={authRole === 'student' ? 'numeric' : 'text'}
                   maxLength={authRole === 'student' ? 13 : undefined}
+                  autoComplete="username"
                   className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                 />
               </div>

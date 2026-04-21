@@ -53,6 +53,9 @@ export default function TeacherCourseDetail() {
   const [courseTimeSettings, setCourseTimeSettings] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
   const [editTimeForm, setEditTimeForm] = useState({ start: '09:00', late: '09:15', absent: '09:30' });
 
+  const [maxAbsences, setMaxAbsences] = useState(4);
+  const [editMaxAbsences, setEditMaxAbsences] = useState(4);
+
   const [locationSettings, setLocationSettings] = useState({ name: '', lat: '', lng: '', radius: 50 });
   const [editLocationForm, setEditLocationForm] = useState(locationSettings);
 
@@ -190,6 +193,11 @@ export default function TeacherCourseDetail() {
           setEditTimeForm({ start, late: lateFmt, absent: absentFmt });
         }
 
+        if (data.maxAbsences !== undefined && data.maxAbsences !== null) {
+          setMaxAbsences(data.maxAbsences);
+          setEditMaxAbsences(data.maxAbsences);
+        }
+
         if (data.latitude && data.longitude) {
           const newLoc = {
             name: `ห้อง ${data.room || 'ไม่ระบุ'}`,
@@ -272,7 +280,7 @@ export default function TeacherCourseDetail() {
         const attendancePercent = pastDatesCount > 0 ? Math.round(((presentCount + lateCount) / pastDatesCount) * 100) : 100;
         const absentPercent = pastDatesCount > 0 ? Math.round((totalAbsent / pastDatesCount) * 100) : 0;
 
-        const isRisk = pastDatesCount > 0 && (absentPercent >= 20 || totalAbsent >= 3);
+        const isRisk = pastDatesCount > 0 && (absentPercent >= 20 || totalAbsent >= (maxAbsences - 1));
 
         return {
           ...student,
@@ -294,7 +302,7 @@ export default function TeacherCourseDetail() {
           studentUserId: s.studentUserId || s.id,
           studentId: s.studentId,
           studentName: s.name,
-          issue: s.absentPercent >= 20 ? `ขาดเรียนสะสมถึง ${s.absentPercent}%` : `ขาดเรียนสะสม ${s.absentCount} ครั้ง`,
+          issue: s.absentCount >= maxAbsences ? `ขาดเรียนสะสม ${s.absentCount} ครั้ง (เกินเกณฑ์หักคะแนน)` : `ขาดเรียนสะสม ${s.absentCount} ครั้ง (เริ่มมีความเสี่ยง)`,
           status: 'pending'
         }));
 
@@ -531,11 +539,13 @@ export default function TeacherCourseDetail() {
         term: courseInfo.term,
         startTime: editTimeForm.start,
         endTime: editTimeForm.absent,
-        lateThresholdMinutes: lateThreshold
+        lateThresholdMinutes: lateThreshold,
+        maxAbsences: parseInt(editMaxAbsences)
       };
 
       await classService.updateClass(courseId, payload);
       setCourseTimeSettings(editTimeForm);
+      setMaxAbsences(parseInt(editMaxAbsences));
       setShowSetTimeModal(false);
       showSuccess("บันทึกเวลาเรียบร้อยแล้ว!");
     } catch (error) {
@@ -975,6 +985,7 @@ export default function TeacherCourseDetail() {
                         </p>
                       </div>
                       <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-blue-600 bg-blue-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
+                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">เกณฑ์การขาดเรียน</span><p className="font-bold text-rose-600 bg-rose-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">ขาดได้ไม่เกิน {maxAbsences} ครั้ง</p></div>
                     </div>
                   </div>
                 </div>
@@ -1254,7 +1265,7 @@ export default function TeacherCourseDetail() {
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-4">
                 <h4 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center"><Brain className="mr-2 text-blue-600 shrink-0" size={20} /> AI วิเคราะห์ความเสี่ยง</h4>
-                <p className="text-xs sm:text-sm text-slate-500">แจ้งเตือนอัตโนมัติเมื่อขาดเรียนเกิน 20% หรือ 3 ครั้ง</p>
+                <p className="text-xs sm:text-sm text-slate-500">แจ้งเตือนอัตโนมัติเมื่อขาดเรียนเกิน 20% หรือ {maxAbsences - 1} ครั้งขึ้นไป</p>
               </div>
               {loadingTerm ? (
                 <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
@@ -1264,7 +1275,7 @@ export default function TeacherCourseDetail() {
               ) : riskAlerts.length === 0 ? (
                 <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
                   <CheckCircle size={40} className="mx-auto text-emerald-400 mb-4" />
-                  <p className="font-bold text-slate-800 text-lg">ไม่มีนักศึกษาในกลุ่มเสี่ยงหมดสิทธิ์สอบ</p>
+                  <p className="font-bold text-slate-800 text-lg">ไม่มีนักศึกษาในกลุ่มเสี่ยงหักคะแนน</p>
                   <p className="text-sm text-slate-500 mt-2">นักศึกษาทุกคนมีความรับผิดชอบในการเข้าเรียนอยู่ในเกณฑ์ที่น่าพอใจ</p>
                 </div>
               ) : (
@@ -1274,7 +1285,7 @@ export default function TeacherCourseDetail() {
                       <div className="flex items-start mb-4">
                         <div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div>
                         <div>
-                          <h5 className="font-bold text-red-800 mb-1">ความเสี่ยงหมดสิทธิ์สอบ</h5>
+                          <h5 className="font-bold text-red-800 mb-1">กลุ่มเสี่ยงเกินเกณฑ์ขาดเรียน</h5>
                           <p className="text-sm text-red-700">
                             <span className="font-bold text-base block my-1">{alert.studentName}</span>
                             {alert.issue}
@@ -1305,13 +1316,19 @@ export default function TeacherCourseDetail() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">กำหนดเวลา</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">กำหนดเวลาและเกณฑ์</h3>
             <div className="space-y-3 mb-6">
               <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({ ...editTimeForm, start: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
               <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({ ...editTimeForm, late: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
               <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน (หลังจากเวลา / เลิกคลาส)</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({ ...editTimeForm, absent: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+              
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-700 mb-1">ขาดเรียนได้สูงสุด (ครั้ง)</label>
+                <input type="number" min="1" max="10" value={editMaxAbsences} onChange={(e) => setEditMaxAbsences(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <p className="text-[10px] text-slate-500 mt-1">AI จะแจ้งเตือนนักศึกษาเมื่อขาดเรียนใกล้หรือเกินเกณฑ์นี้</p>
+              </div>
             </div>
-            <button onClick={handleSaveTimeSettings} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 shadow-md">บันทึกเวลาเช็คชื่อ</button>
+            <button onClick={handleSaveTimeSettings} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 shadow-md">บันทึกการตั้งค่า</button>
           </div>
         </div>
       )}

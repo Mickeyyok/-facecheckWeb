@@ -222,9 +222,10 @@ export default function StudentDashboard() {
     }
   };
 
+  const maxAbsences = activeCourse?.maxAbsences || 4;
   const aiAnalysis = ((absentCount) => {
-    if (absentCount >= 4) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: 'ตัดสิทธิ์สอบ!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง เกินเกณฑ์แล้ว` };
-    if (absentCount === 3) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: 'AI Warning: เสี่ยงหมดสิทธิ์สอบ!', msg: 'ขาดเรียน 3 ครั้งแล้ว ระวังถูกตัดสิทธิ์สอบ' };
+    if (absentCount >= maxAbsences) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: 'เกินเกณฑ์การขาดเรียน!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง อาจถูกหักคะแนนการเข้าเรียนตามเกณฑ์` };
+    if (absentCount === maxAbsences - 1) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: 'AI Warning: เสี่ยงถูกหักคะแนน!', msg: `ขาดเรียน ${absentCount} ครั้งแล้ว ระวังเกินเกณฑ์การเข้าเรียน` };
     return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'AI Suggestion', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
   })(classStats.absent);
 

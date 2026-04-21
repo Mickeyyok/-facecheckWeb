@@ -291,7 +291,7 @@ export default function Login() {
         <div className="hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center bg-[#1a237e] relative overflow-hidden">
           <img src={utccLogo} alt="Logo" className="mb-6 w-44 object-contain z-10 drop-shadow-lg" />
           <h1 className="text-4xl font-black z-10 tracking-tight">FaceCheck UTCC</h1>
-          <p className="z-10 mt-4 opacity-80 text-center font-medium">Smart Attendance &amp; Geo-Location System</p>
+          <p className="z-10 mt-4 opacity-80 text-center font-medium">ระบบเช็คชื่ออัจฉริยะ</p>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-2xl -ml-10 -mb-10" />
         </div>

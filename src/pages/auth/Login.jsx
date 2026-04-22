@@ -261,8 +261,13 @@ export default function Login() {
         switchMode('login');
 
       } else {
-        // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษาส่งรหัสนักศึกษาเป็น username)
-        const loginData = { username: identifier.trim(), password };
+        // ส่งทั้ง username และ studentId เพื่อ compatible กับ backend ที่อาจรับ field ต่างกัน
+        const trimmedId = identifier.trim();
+        const loginData = {
+          username: trimmedId,
+          password,
+          ...(isStudent ? { studentId: trimmedId } : {}),
+        };
         const response = await authService.login(loginData);
 
         // รองรับ response structure หลายรูปแบบ

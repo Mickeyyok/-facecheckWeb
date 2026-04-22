@@ -12,6 +12,7 @@ export default function MainLayout({ role }) {
   const location = useLocation();
 
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export default function MainLayout({ role }) {
         // สำหรับอาจารย์ ให้นับรวมคำขอลาที่รออนุมัติด้วย
         if (role === 'teacher') {
           leaveRequestService.getPendingByTeacher(user.id).then(leaves => {
+            setPendingLeaveCount(leaves.length);
             setUnreadNotificationsCount(unreadCount + leaves.length);
           }).catch(() => setUnreadNotificationsCount(unreadCount));
         } else {
@@ -113,11 +115,16 @@ export default function MainLayout({ role }) {
           {role === 'teacher' && (
             <NavLink 
               to={`/${role}/leave-requests`} 
-              className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               <div className="flex items-center space-x-3">
                 <FileText size={20} /><span>คำขอลา</span>
               </div>
+              {pendingLeaveCount > 0 && (
+                <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                  {pendingLeaveCount}
+                </span>
+              )}
             </NavLink>
           )}
         </nav>

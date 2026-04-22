@@ -26,9 +26,9 @@ function getPasswordStrength(pw) {
 
 const strengthMeta = [
   { label: 'อ่อนมาก', color: '#ef4444' },
-  { label: 'อ่อน',    color: '#f97316' },
-  { label: 'พอใช้',   color: '#eab308' },
-  { label: 'ดี',      color: '#22c55e' },
+  { label: 'อ่อน', color: '#f97316' },
+  { label: 'พอใช้', color: '#eab308' },
+  { label: 'ดี', color: '#22c55e' },
   { label: 'แข็งแกร่ง', color: '#15803d' },
 ];
 
@@ -124,10 +124,10 @@ export default function Login() {
     const pitch = (nose.y - centerY) / Math.abs(pts[8].y - pts[27].y);
     switch (requiredPose) {
       case 'straight': return Math.abs(yaw) < 0.35 && Math.abs(pitch) < 0.35;
-      case 'left':  return yaw < -0.05;
+      case 'left': return yaw < -0.05;
       case 'right': return yaw > 0.05;
-      case 'up':    return pitch < -0.05;
-      default:      return false;
+      case 'up': return pitch < -0.05;
+      default: return false;
     }
   };
 
@@ -271,7 +271,7 @@ export default function Login() {
         const response = await authService.login(loginData);
 
         // รองรับ response structure หลายรูปแบบ
-        const userData  = response.user  || response;
+        const userData = response.user || response;
         const tokenData = response.token || response.accessToken || null;
 
         login(userData, tokenData);
@@ -318,18 +318,16 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => switchRole('student')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${
-                  authRole === 'student' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'student' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 <User size={18} /><span>นักศึกษา</span>
               </button>
               <button
                 type="button"
                 onClick={() => switchRole('teacher')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${
-                  authRole === 'teacher' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'teacher' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 <Users size={18} /><span>อาจารย์</span>
               </button>
@@ -532,9 +530,8 @@ export default function Login() {
               <button
                 onClick={handleCapturePose}
                 disabled={!isPoseCorrect}
-                className={`w-full py-4 rounded-2xl font-bold text-white transition-all shadow-xl ${
-                  isPoseCorrect ? 'bg-[#1a237e] hover:shadow-blue-900/40' : 'bg-slate-300 cursor-not-allowed'
-                }`}
+                className={`w-full py-4 rounded-2xl font-bold text-white transition-all shadow-xl ${isPoseCorrect ? 'bg-[#1a237e] hover:shadow-blue-900/40' : 'bg-slate-300 cursor-not-allowed'
+                  }`}
               >
                 บันทึกมุม {poses[currentPoseIndex].toUpperCase()}
               </button>

@@ -289,51 +289,55 @@ export default function Login() {
 
   // --- 5. Render ---
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center font-sans selection:bg-blue-100">
-      <div className="bg-white w-full h-screen flex overflow-hidden relative shadow-2xl">
+    <div className="min-h-screen flex items-center justify-center font-sans relative overflow-hidden" style={{background:'#1a237e'}}>
+      {/* Ambient blobs */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-black/20 rounded-full blur-3xl translate-x-1/3 translate-y-1/3 pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 w-[600px] h-[600px] bg-blue-800/30 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
 
-        {/* Left Branding */}
-        <div className="hidden md:flex w-1/2 p-12 text-white flex-col justify-center items-center bg-[#1a237e] relative overflow-hidden">
-          <img src={utccLogo} alt="Logo" className="mb-6 w-44 object-contain z-10 drop-shadow-lg" />
-          <h1 className="text-4xl font-black z-10 tracking-tight">FaceCheck UTCC</h1>
-          <p className="z-10 mt-4 opacity-80 text-center font-medium">ระบบเช็คชื่ออัจฉริยะ</p>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-2xl -ml-10 -mb-10" />
+      <div className="relative z-10 w-full flex flex-col items-center justify-center min-h-screen py-8 px-4">
+        {/* Logo above card */}
+        <div className="flex flex-col items-center mb-6">
+          <img src={utccLogo} alt="Logo" className="w-20 object-contain drop-shadow-2xl mb-3" />
+          <h1 className="text-white text-2xl font-black tracking-tight drop-shadow">FaceCheck UTCC</h1>
+          <p className="text-white/60 text-sm font-medium mt-1">ระบบเช็คชื่ออัจฉริยะ</p>
         </div>
 
-        {/* Right Form */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-white overflow-y-auto">
-          <div className="max-w-md w-full mx-auto">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-black text-slate-800">
+        {/* Glass Card */}
+        <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl">
+          <div className="w-full">
+            <div className="text-center mb-7">
+              <h2 className="text-2xl font-black text-slate-800">
                 {authMode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
               </h2>
-              <p className="text-slate-500 mt-2 font-medium">
+              <p className="text-slate-500 mt-1.5 text-sm font-medium">
                 {authMode === 'login' ? 'ยินดีต้อนรับกลับเข้าสู่ระบบ' : 'สร้างบัญชีเพื่อเริ่มต้นใช้งาน'}
               </p>
             </div>
 
             {/* Role Toggle */}
-            <div className="flex p-1 bg-slate-100 rounded-2xl mb-8 border border-slate-200">
+            <div className="flex p-1 bg-slate-100 rounded-2xl mb-6 gap-1 border border-slate-200">
               <button
                 type="button"
                 onClick={() => switchRole('student')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'student' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
-                  }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  authRole === 'student' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
+                }`}
               >
-                <User size={18} /><span>นักศึกษา</span>
+                <User size={16} /><span>นักศึกษา</span>
               </button>
               <button
                 type="button"
                 onClick={() => switchRole('teacher')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${authRole === 'teacher' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
-                  }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  authRole === 'teacher' ? 'bg-white text-[#1a237e] shadow-md' : 'text-slate-500 hover:text-slate-700'
+                }`}
               >
-                <Users size={18} /><span>อาจารย์</span>
+                <Users size={16} /><span>อาจารย์</span>
               </button>
             </div>
 
-            <form onSubmit={handleAuthSubmit} className="space-y-5">
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
               {/* ชื่อ (register เท่านั้น) */}
               {authMode === 'register' && (
                 <div className="space-y-1.5">
@@ -344,7 +348,7 @@ export default function Login() {
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="เช่น นายสมชาย ใจดี"
                     required
-                    className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm text-slate-800"
                   />
                 </div>
               )}
@@ -363,7 +367,7 @@ export default function Login() {
                   inputMode={authRole === 'student' ? 'numeric' : 'text'}
                   maxLength={authRole === 'student' ? 13 : undefined}
                   autoComplete="username"
-                  className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm text-slate-800"
                 />
               </div>
 
@@ -377,14 +381,14 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm text-slate-800 tracking-widest"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1a237e] transition-colors"
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
 
@@ -421,14 +425,14 @@ export default function Login() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="••••••••"
                         required
-                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all tracking-widest"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-[#1a237e] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm text-slate-800 tracking-widest"
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword((v) => !v)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1a237e] transition-colors"
                       >
-                        {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                     {/* realtime mismatch hint */}
@@ -463,7 +467,7 @@ export default function Login() {
 
               {/* Error Message */}
               {error && (
-                <div className="text-red-500 text-sm text-center bg-red-50 py-3 rounded-xl font-medium">
+                <div className="text-red-600 text-sm text-center bg-red-50 border border-red-200 py-3 rounded-xl font-medium">
                   {error}
                 </div>
               )}
@@ -472,7 +476,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 rounded-2xl font-bold text-white bg-[#1a237e] hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-blue-900/20 mt-4"
+                className="w-full py-3.5 rounded-xl font-bold text-white bg-[#1a237e] hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-blue-900/20 mt-2 text-sm"
               >
                 {isLoading
                   ? 'กำลังประมวลผล...'
@@ -480,10 +484,10 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="mt-10 text-center">
+            <div className="mt-7 text-center">
               <button
                 onClick={() => switchMode(authMode === 'login' ? 'register' : 'login')}
-                className="text-slate-500 font-medium hover:text-[#1a237e] transition-colors"
+                className="text-slate-500 font-medium hover:text-[#1a237e] transition-colors text-sm"
               >
                 {authMode === 'login'
                   ? <span>ยังไม่มีบัญชี? <span className="font-bold text-[#1a237e] underline">สมัครสมาชิก</span></span>

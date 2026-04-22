@@ -251,10 +251,10 @@ export default function StudentDashboard() {
   };
 
   const maxAbsences = activeCourse?.maxAbsences || 4;
-  const aiAnalysis = ((absentCount) => {
+  const attendanceCard = ((absentCount) => {
     if (absentCount >= maxAbsences) return { color: 'from-rose-600 to-red-800 ring-rose-500/50', icon: <AlertOctagon size={32}/>, title: 'เกินเกณฑ์การขาดเรียน!', msg: `คุณขาดเรียนสะสม ${absentCount} ครั้ง อาจถูกหักคะแนนการเข้าเรียนตามเกณฑ์` };
-    if (absentCount === maxAbsences - 1) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: 'AI Warning: เสี่ยงถูกหักคะแนน!', msg: `ขาดเรียน ${absentCount} ครั้งแล้ว ระวังเกินเกณฑ์การเข้าเรียน` };
-    return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'AI Suggestion', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
+    if (absentCount === maxAbsences - 1) return { color: 'from-orange-500 to-amber-700 ring-orange-500/50 animate-pulse', icon: <AlertOctagon size={32}/>, title: 'แจ้งเตือน: เสี่ยงถูกหักคะแนน!', msg: `ขาดเรียน ${absentCount} ครั้งแล้ว ระวังเกินเกณฑ์การเข้าเรียน` };
+    return { color: 'from-[#131B2F] to-[#1a2542] ring-white/5', icon: <Brain size={32}/>, title: 'สรุปสถิติการเข้าเรียน', msg: `สถิติปัจจุบัน ขาดเรียน ${absentCount} ครั้ง หมั่นเข้าเรียนให้ตรงเวลานะครับ` };
   })(classStats.absent);
 
   const handleSubmitLeave = async () => {
@@ -397,11 +397,11 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          <div className={`rounded-[2rem] shadow-xl p-8 text-white relative overflow-hidden group flex flex-col sm:flex-row items-center gap-6 bg-gradient-to-br transition-all duration-500 ring-2 ${aiAnalysis.color}`}>
-            <div className={`w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center border backdrop-blur-md z-10 bg-white/5 border-white/10`}>{aiAnalysis.icon}</div>
+          <div className={`rounded-[2rem] shadow-xl p-8 text-white relative overflow-hidden group flex flex-col sm:flex-row items-center gap-6 bg-gradient-to-br transition-all duration-500 ring-2 ${attendanceCard.color}`}>
+            <div className={`w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center border backdrop-blur-md z-10 bg-white/5 border-white/10`}>{attendanceCard.icon}</div>
             <div className="text-center sm:text-left z-10 w-full">
-              <h4 className="font-extrabold mb-2 text-xl tracking-wide">{aiAnalysis.title}</h4>
-              <p className="text-[15px] text-white/90 leading-relaxed font-medium">{aiAnalysis.msg}</p>
+              <h4 className="font-extrabold mb-2 text-xl tracking-wide">{attendanceCard.title}</h4>
+              <p className="text-[15px] text-white/90 leading-relaxed font-medium">{attendanceCard.msg}</p>
             </div>
           </div>
 

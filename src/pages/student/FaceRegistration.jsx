@@ -87,7 +87,7 @@ const FaceRegistration = () => {
           `ขั้นตอนต่อไป: ${poseTexts[poses[currentPoseIndex + 1]]}`
         );
       } else {
-        showSuccess('ยอดเยี่ยม!', 'สแกนใบหน้าครบทุกมุมแล้วครับ 🎉 พร้อมบันทึกข้อมูล');
+        showSuccess('ยอดเยี่ยม!', 'สแกนใบหน้าครบทุกมุมแล้วครับ พร้อมบันทึกข้อมูล');
       }
     } else {
       showAlert('ไม่พบใบหน้า', 'กรุณาขยับใบหน้าให้อยู่ในกรอบ หรือปรับแสงสว่างให้เพียงพอครับ');
@@ -111,7 +111,7 @@ const FaceRegistration = () => {
 
   return (
     <div className="flex flex-col items-center p-8 bg-gray-50 rounded-2xl shadow-xl">
-      <h2 className="text-3xl font-bold mb-2">ลงทะเบียนใบหน้าแบบละเอียด (4 มุม) 📸</h2>
+      <h2 className="text-3xl font-bold mb-2">ลงทะเบียนใบหน้าแบบละเอียด (4 มุม)</h2>
       <p className="text-gray-600 mb-6">
         Follow the prompts to capture 4 different head poses for better accuracy.
       </p>

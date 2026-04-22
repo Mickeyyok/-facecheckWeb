@@ -1,21 +1,31 @@
+// ==========================================
+// 📦 Dependencies & Imports
+// ==========================================
 import React, { useState, useEffect } from 'react';
-import { showSuccess, showError, showAlert, showConfirm } from '../../utils/alertPopup';
 import { useParams, useNavigate } from 'react-router-dom';
+import { showSuccess, showError, showAlert, showConfirm } from '../../utils/alertPopup';
 import {
-  MapPin, Camera, ChevronRight, FileText, CheckCircle, Edit, Clock,
-  Target, AlertTriangle, Search, Plus, Trash2, Calendar, BarChart2,
-  Brain, Sparkles, Mail, XCircle, Users, Download, RefreshCw, Filter, ChevronLeft,
-  Upload, FileUp, CheckCircle2, AlertCircle, Loader2, UserPlus
+  MapPin, ChevronLeft, Calendar,
+  AlertTriangle, Plus, Trash2, XCircle,
+  Upload, FileUp, CheckCircle2, AlertCircle, Loader2, UserPlus, Search,
+  Target, CheckCircle, FileText
 } from 'lucide-react';
 import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
 import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../context/AuthContext';
-import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix Leaflet default marker icon
+// ==========================================
+// 📑 Tab Components (แยกไฟล์ย่อยตาม Clean Architecture)
+// ==========================================
+import CourseInfoTab from './course-detail/CourseInfoTab';
+import StudentListTab from './course-detail/StudentListTab';
+import DailyStatsTab from './course-detail/DailyStatsTab';
+import TermStatsTab from './course-detail/TermStatsTab';
+
+// 🗺️ Leaflet Marker Icon Fix
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -23,11 +33,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-function ChangeMapView({ center }) {
-  const map = useMap();
-  useEffect(() => { map.setView(center); }, [center, map]);
-  return null;
-}
 
 const StatusBadge = ({ status }) => {
   if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">ตรงเวลา</span>;
@@ -37,6 +42,11 @@ const StatusBadge = ({ status }) => {
   return <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">- รอดำเนินการ</span>;
 };
 
+/**
+ * @component TeacherCourseDetail
+ * @description หน้าจัดการคลาสเรียนสำหรับอาจารย์ (Dashboard ของแต่ละรายวิชา)
+ * ครอบคลุมการตั้งค่าพิกัดเช็คชื่อเวลาเรียน การนำเข้านักศึกษาผ่านระบบ CSV และสถิติการเข้าเรียนประเมินผลความเสี่ยงร่วมกับ AI
+ */
 export default function TeacherCourseDetail() {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -95,7 +105,9 @@ export default function TeacherCourseDetail() {
   // Cache key to avoid repeated Gemini calls for same data
   const aiCacheKeyRef = React.useRef('');
 
-  // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
+  // ==========================================
+  // 🕒 ระบบตรวจสอบเวลาแบบ Real-time (Scan Time Check)
+  // ==========================================
   const [nowTime, setNowTime] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setNowTime(new Date()), 10000);
@@ -162,6 +174,10 @@ export default function TeacherCourseDetail() {
     return new Date(dateStr) < today;
   };
   const isDateToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
+
+  // ==========================================
+  // 🔄 ระบบดึงข้อมูลจาก Server API (Data Fetching)
+  // ==========================================
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -323,7 +339,14 @@ export default function TeacherCourseDetail() {
     }
   };
 
-  // ✅ เรียก Gemini API จริง วิเคราะห์ข้อมูลการเข้าเรียน
+  // ==========================================
+  // 🤖 AI Data Analysis (ประเมินความเสี่ยงด้วย Gemini AI)
+  // ==========================================
+
+  /**
+   * @function callGeminiAnalysis
+   * @description ส่งสถิติการเข้าเรียนของนักศึกษาในคลาสไปยัง Generative AI (Gemini) เพื่อวิเคราะห์สรุปผลและให้คำแนะนำ
+   */
   const callGeminiAnalysis = async (stats, totalClasses, courseName, courseCode) => {
     setLoadingAi(true);
     setAiError('');
@@ -473,7 +496,14 @@ ${top5Absent.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ขาด ${s
     URL.revokeObjectURL(url);
   };
 
-  // ✅ ปรับแก้ฟังก์ชันเพิ่มนักศึกษา และใช้ state แจ้งเตือน
+  // ==========================================
+  // 👩‍🎓 จัดการรายชื่อนักศึกษาแบบ Manual (Student Management)
+  // ==========================================
+
+  /**
+   * @function handleAddStudent
+   * @description พยายามเพิ่มนักศึกษาเข้าคลาสผ่าน API แล้วรอโหลดผลลัพธ์ใหม่
+   */
   const handleAddStudent = async () => {
     setAddStudentError('');
     setAddStudentSuccess('');
@@ -503,8 +533,13 @@ ${top5Absent.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ขาด ${s
   };
 
   // ==========================================
-  // CSV Import handlers
+  // 📥 ระบบนำเข้ารายชื่อนักศึกษาผ่านไฟล์ CSV
   // ==========================================
+  
+  /**
+   * @function parseCsvText
+   * @description รับข้อมูล Text ต้นฉบับจาก CSV และกรองเอารหัสเฉพาะตัวนักศึกษา (10-13 หลัก)
+   */
   const parseCsvText = (rawText) => {
     const text = rawText
       .replace(/^\uFEFF/, '')
@@ -828,507 +863,95 @@ ${top5Absent.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ขาด ${s
         {/* Content Area */}
         <div className="p-4 sm:p-6 md:p-8">
 
+          
           {/* TAB 1: ข้อมูลวิชา */}
           {courseSubTab === 'info' && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              <div>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-indigo-600 shrink-0" size={18} /> ข้อมูลวิชาเบื้องต้น</h4>
-                  {!isEditingCourseInfo ? (
-                    <button onClick={() => { setEditCourseForm(courseInfo); setIsEditingCourseInfo(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center">
-                      <Edit size={14} className="mr-1.5" /> แก้ไขข้อมูล
-                    </button>
-                  ) : (
-                    <div className="flex space-x-2">
-                      <button onClick={() => setIsEditingCourseInfo(false)} className="text-sm bg-slate-100 text-slate-600 font-bold px-4 py-2 rounded-lg hover:bg-slate-200 transition shadow-sm">ยกเลิก</button>
-                      <button onClick={async () => {
-                        try {
-                          const payload = {
-                            subjectName: editCourseForm.name,
-                            subjectCode: editCourseForm.code,
-                            instructorName: editCourseForm.instructor,
-                            room: editCourseForm.room,
-                            term: editCourseForm.term
-                          };
-                          await classService.updateClass(courseId, payload);
-                          setCourseInfo(editCourseForm);
-                          setIsEditingCourseInfo(false);
-                          showSuccess("บันทึกข้อมูลสำเร็จ");
-                        } catch (error) {
-                          showError("บันทึกข้อมูลไม่สำเร็จ", error.response?.data?.message || error.message);
-                        }
-                      }} className="text-sm bg-indigo-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm flex items-center"><CheckCircle size={14} className="mr-1.5" /> บันทึก</button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-                  {!isEditingCourseInfo ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div><span className="text-slate-500 block mb-1 text-xs font-bold uppercase tracking-wide">ชื่อวิชา</span><span className="font-bold text-slate-800 block text-[15px]">{courseInfo.name}</span></div>
-                      <div><span className="text-slate-500 block mb-1 text-xs font-bold uppercase tracking-wide">รหัสวิชา</span><span className="font-bold text-slate-800 block text-[15px]">{courseInfo.code}</span></div>
-                      <div><span className="text-slate-500 block mb-1 text-xs font-bold uppercase tracking-wide">ชื่ออาจารย์</span><span className="font-bold text-slate-800 block text-[15px]">{courseInfo.instructor}</span></div>
-                      <div><span className="text-slate-500 block mb-1 text-xs font-bold uppercase tracking-wide">ห้องเรียน</span><span className="font-bold text-slate-800 block text-[15px]">{courseInfo.room}</span></div>
-                      <div><span className="text-slate-500 block mb-1 text-xs font-bold uppercase tracking-wide">ปีการศึกษา / เทอม</span><span className="font-bold text-slate-800 block text-[15px]">{courseInfo.term}</span></div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {['name', 'code', 'instructor', 'room'].map(field => (
-                        <div key={field}>
-                          <label className="text-slate-500 block mb-1.5 text-xs font-bold uppercase tracking-wide">
-                            {field === 'name' ? 'ชื่อวิชา' : field === 'code' ? 'รหัสวิชา' : field === 'instructor' ? 'ชื่ออาจารย์' : 'ห้องเรียน'}
-                          </label>
-                          <input type="text" value={editCourseForm[field]} onChange={(e) => setEditCourseForm({ ...editCourseForm, [field]: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm" />
-                        </div>
-                      ))}
-                      <div>
-                        <label className="text-slate-500 block mb-1.5 text-xs font-bold uppercase tracking-wide">
-                          ปีการศึกษา / เทอม
-                        </label>
-                        <div className="flex space-x-2">
-                          <input 
-                            type="number" 
-                            placeholder="ปี เช่น 2568" 
-                            value={editCourseForm.term ? editCourseForm.term.split(' / ')[0] : ''} 
-                            onChange={(e) => {
-                              const t = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1';
-                              setEditCourseForm({ ...editCourseForm, term: `${e.target.value} / ${t}` });
-                            }} 
-                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm" 
-                          />
-                          <select 
-                            value={editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1'} 
-                            onChange={(e) => {
-                              const y = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[0] : '';
-                              setEditCourseForm({ ...editCourseForm, term: `${y} / ${e.target.value}` });
-                            }} 
-                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm"
-                          >
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3">ฤดูร้อน</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-indigo-600 shrink-0" size={18} /> กำหนดเวลาและวันที่เช็คชื่อ</h4>
-                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm w-full sm:w-auto text-center">แก้ไขเวลา</button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
-                  <div className="border border-green-200 bg-green-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-green-600 font-bold text-[10px] sm:text-sm block mb-1">ตรงเวลา</span><span className="text-lg sm:text-2xl font-bold text-green-800">{courseTimeSettings.start} <span className="hidden sm:inline">น.</span></span></div>
-                  <div className="border border-yellow-200 bg-yellow-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-yellow-600 font-bold text-[10px] sm:text-sm block mb-1">สาย</span><span className="text-lg sm:text-2xl font-bold text-yellow-800">{courseTimeSettings.late} <span className="hidden sm:inline">น.</span></span></div>
-                  <div className="border border-red-200 bg-red-50 p-3 sm:p-5 rounded-xl shadow-sm"><span className="text-red-600 font-bold text-[10px] sm:text-sm block mb-1">ขาดเรียน</span><span className="text-lg sm:text-2xl font-bold text-red-800">{courseTimeSettings.absent} <span className="hidden sm:inline">น.</span></span></div>
-                </div>
-
-                {/* สถานะสแกน real-time */}
-                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-5 ${scanStatus.isOpen ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
-                  <div className={`w-2.5 h-2.5 rounded-full ${scanStatus.isOpen ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-400'}`}></div>
-                  <span>{scanStatus.label}</span>
-                </div>
-
-                <div className="border-t border-slate-100 pt-5">
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-5 md:p-6 shadow-sm">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5">
-                      <div>
-                        <p className="text-[15px] font-bold text-slate-700 flex items-center">
-                          <Calendar size={18} className="mr-2 text-indigo-500" /> วันที่เปิดให้เช็คชื่อ
-                          {scheduledDates.length > 0 && <span className="ml-2 bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">{scheduledDates.length} วัน</span>}
-                        </p>
-                        <p className="text-sm text-slate-500 mt-1">กำหนดตารางทั้งเทอม หรือเพิ่มวันพิเศษได้จากส่วนนี้</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2.5 w-full lg:w-auto">
-                        <button onClick={() => { setGenerateForm({ selectedDays: [], startDate: '', endDate: '' }); setShowGenerateModal(true); }} className="text-sm bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition shadow-sm flex items-center justify-center min-w-[170px]">
-                          สร้างตารางอัตโนมัติ
-                        </button>
-                        <button onClick={() => { setNewDateForm({ date: '', note: '' }); setShowAddDateModal(true); }} className="text-sm bg-white text-indigo-600 border border-indigo-200 font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-50 transition shadow-sm flex items-center justify-center min-w-[140px]">
-                          <Plus size={15} className="mr-1.5" /> เพิ่มวันเดี่ยว
-                        </button>
-                        {scheduledDates.length > 0 && (
-                          <button onClick={handleClearAllDates} className="text-sm bg-white text-red-500 border border-red-200 font-bold px-4 py-2.5 rounded-xl hover:bg-red-50 transition shadow-sm flex items-center justify-center min-w-[130px]">
-                            <Trash2 size={15} className="mr-1.5" /> ล้างทั้งหมด
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {scheduledDates.length === 0 ? (
-                      <div className="bg-white border border-slate-200 border-dashed rounded-2xl p-10 text-center">
-                        <Calendar size={36} className="mx-auto text-slate-300 mb-3" />
-                        <p className="font-bold text-slate-500 text-base">ยังไม่มีวันที่กำหนดเช็คชื่อ</p>
-                        <p className="text-slate-400 text-sm mt-2 leading-relaxed">กดปุ่ม <span className="font-bold text-indigo-600">"สร้างตารางอัตโนมัติ"</span> เพื่อเลือกวันในสัปดาห์ + ช่วงเทอม<br />หรือกด "เพิ่มวันเดี่ยว" สำหรับวันพิเศษ เช่น สอนชดเชย</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
-                          <div className="bg-white border border-indigo-100 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
-                            <p className="text-2xl sm:text-3xl font-extrabold text-indigo-700 leading-none">{scheduledDates.filter(d => !isDatePast(d.date)).length}</p>
-                            <p className="text-[10px] sm:text-xs font-bold text-indigo-500 mt-1.5 sm:mt-2 uppercase tracking-wide">วันที่เหลือ</p>
-                          </div>
-                          <div className="bg-white border border-emerald-100 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
-                            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 leading-none">{scheduledDates.filter(d => isDatePast(d.date)).length}</p>
-                            <p className="text-[10px] sm:text-xs font-bold text-emerald-500 mt-1.5 sm:mt-2 uppercase tracking-wide">ผ่านไปแล้ว</p>
-                          </div>
-                          <div className="bg-white border border-slate-200 rounded-2xl px-3 sm:px-5 py-3 sm:py-4 text-center shadow-sm">
-                            <p className="text-2xl sm:text-3xl font-extrabold text-slate-700 leading-none">{scheduledDates.length}</p>
-                            <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1.5 sm:mt-2 uppercase tracking-wide">ทั้งหมด</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
-                          {scheduledDates.map((item, idx) => {
-                            const past = isDatePast(item.date);
-                            const today = isDateToday(item.date);
-                            return (
-                              <div key={item.id} className={`flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 rounded-xl border shadow-sm transition-all ${today ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200' : past ? 'bg-white border-slate-200 opacity-55' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
-                                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                                  <span className={`text-xs font-bold w-5 sm:w-7 text-center shrink-0 ${past ? 'text-slate-400' : 'text-slate-500'}`}>{idx + 1}</span>
-                                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${today ? 'bg-indigo-600 text-white' : past ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
-                                    <Calendar size={14} className="sm:hidden" />
-                                    <Calendar size={16} className="hidden sm:block" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className={`font-bold text-sm sm:text-[15px] truncate ${today ? 'text-indigo-800' : past ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
-                                      {formatThaiDate(item.date)}
-                                      {today && <span className="ml-1.5 sm:ml-2 text-[10px] bg-indigo-600 text-white px-1.5 sm:px-2 py-0.5 rounded-full font-bold animate-pulse">วันนี้</span>}
-                                    </p>
-                                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">{item.note || (item.auto ? 'สร้างอัตโนมัติ' : 'เพิ่มเอง')}</p>
-                                  </div>
-                                </div>
-                                <button onClick={() => setDateToDelete(item)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition shrink-0 ml-2" title="ลบวัน">
-                                  <Trash2 size={14} className="sm:hidden" />
-                                  <Trash2 size={16} className="hidden sm:block" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-indigo-600 shrink-0" size={18} /> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
-                  <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center"><Target size={14} className="mr-1.5" /> ตั้งค่าพิกัด</button>
-                </div>
-                <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 sm:gap-6 items-center shadow-sm">
-                  <div className="w-full md:w-1/3 h-48 sm:h-56 rounded-xl overflow-hidden shadow-inner border border-slate-300 relative z-0">
-                    {locationSettings.lat && locationSettings.lng ? (
-                      <MapContainer
-                        center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]}
-                        zoom={17}
-                        scrollWheelZoom={false}
-                        dragging={false}
-                        zoomControl={false}
-                        attributionControl={false}
-                        style={{ height: '100%', width: '100%' }}
-                      >
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        <ChangeMapView center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]} />
-                        <Marker position={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]} />
-                        <Circle
-                          center={[parseFloat(locationSettings.lat), parseFloat(locationSettings.lng)]}
-                          radius={locationSettings.radius || 50}
-                          pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15 }}
-                        />
-                      </MapContainer>
-                    ) : (
-                      <div className="w-full h-full bg-slate-200/50 flex flex-col items-center justify-center text-slate-400">
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
-                          <MapPin size={24} className="text-slate-300" />
-                        </div>
-                        <p className="font-bold text-sm text-slate-500">ยังไม่มีข้อมูลพิกัด</p>
-                        <p className="text-xs mt-1 font-medium text-slate-400">คลิกที่ "ตั้งค่าพิกัด" เพื่อระบุ</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="w-full md:w-2/3 space-y-3 sm:space-y-4">
-                    <div>
-                      <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">จุดอ้างอิงสถานที่</span>
-                      <p className={`font-bold text-base sm:text-lg mt-0.5 ${locationSettings.name ? 'text-slate-800' : 'text-slate-400 italic'}`}>
-                        {locationSettings.name || 'ยังไม่ได้ตั้งค่า'}
-                      </p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row flex-wrap gap-x-8 gap-y-2 sm:gap-y-3">
-                      <div>
-                        <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">พิกัด (Lat, Lng)</span>
-                        <p className={`font-medium mt-0.5 text-sm sm:text-base ${locationSettings.lat ? 'text-slate-700' : 'text-slate-400 italic'}`}>
-                          {locationSettings.lat && locationSettings.lng ? `${locationSettings.lat}, ${locationSettings.lng}` : 'ยังไม่ได้ตั้งค่า'}
-                        </p>
-                      </div>
-                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-indigo-600 bg-indigo-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
-                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">เกณฑ์การขาดเรียน</span><p className="font-bold text-rose-600 bg-rose-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">ขาดได้ไม่เกิน {maxAbsences} ครั้ง</p></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><AlertTriangle className="mr-2 text-rose-500 shrink-0" size={18} /> จัดการสถานะคลาสเรียน</h4>
-                </div>
-                <div className={`border rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all shadow-sm ${isClassCanceled ? 'bg-slate-50 border-slate-200' : 'bg-rose-50/50 border-rose-200'}`}>
-                  <div>
-                    <h5 className={`font-bold mb-1 ${isClassCanceled ? 'text-slate-700' : 'text-rose-800'}`}>{isClassCanceled ? 'คลาสเรียนวันนี้ถูกยกเลิกแล้ว' : 'ยกเลิกคลาสเรียน (Cancel Class)'}</h5>
-                    <p className={`text-sm font-medium ${isClassCanceled ? 'text-slate-500' : 'text-rose-600/80'}`}>ปิดการสแกนใบหน้าสำหรับวันนี้ และส่งแจ้งเตือนไปยังนักศึกษาทั้งหมดทันที</p>
-                  </div>
-                  {isClassCanceled ? (
-                    <button onClick={() => setIsClassCanceled(false)} className="bg-white text-slate-700 border border-slate-200 font-bold px-6 py-3 rounded-xl hover:bg-slate-100 transition shadow-sm shrink-0 w-full md:w-auto">ยกเลิกการยกคลาส (เปิดปกติ)</button>
-                  ) : (
-                    <button onClick={() => setShowCancelClassConfirm(true)} className="bg-rose-500 text-white font-bold px-6 py-3 rounded-xl hover:bg-rose-600 transition shadow-md active:scale-95 shrink-0 w-full md:w-auto">แจ้งยกคลาสเรียนวันนี้</button>
-                  )}
-                </div>
-              </div>
-            </div>
+            <CourseInfoTab
+              courseInfo={courseInfo}
+              setCourseInfo={setCourseInfo}
+              isEditingCourseInfo={isEditingCourseInfo}
+              setIsEditingCourseInfo={setIsEditingCourseInfo}
+              editCourseForm={editCourseForm}
+              setEditCourseForm={setEditCourseForm}
+              classService={classService}
+              courseId={courseId}
+              showSuccess={showSuccess}
+              showError={showError}
+              courseTimeSettings={courseTimeSettings}
+              setEditTimeForm={setEditTimeForm}
+              setShowSetTimeModal={setShowSetTimeModal}
+              scanStatus={scanStatus}
+              scheduledDates={scheduledDates}
+              setGenerateForm={setGenerateForm}
+              setShowGenerateModal={setShowGenerateModal}
+              setNewDateForm={setNewDateForm}
+              setShowAddDateModal={setShowAddDateModal}
+              handleClearAllDates={handleClearAllDates}
+              isDatePast={isDatePast}
+              isDateToday={isDateToday}
+              formatThaiDate={formatThaiDate}
+              setDateToDelete={setDateToDelete}
+              locationSettings={locationSettings}
+              setEditLocationForm={setEditLocationForm}
+              setShowSetLocationModal={setShowSetLocationModal}
+              maxAbsences={maxAbsences}
+              isClassCanceled={isClassCanceled}
+              setIsClassCanceled={setIsClassCanceled}
+              setShowCancelClassConfirm={setShowCancelClassConfirm}
+            />
           )}
 
           {/* TAB 2: รายชื่อนักศึกษา */}
           {courseSubTab === 'students' && (
-            <div className="animate-in fade-in duration-300">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
-                <div><h4 className="font-bold text-slate-800 text-base sm:text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-xs sm:text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                  <button onClick={() => { setAddStudentId(''); setAddStudentError(''); setAddStudentSuccess(''); setShowAddStudentModal(true); }} className="text-sm bg-indigo-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-indigo-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Plus size={15} /> เพิ่มรายชื่อ</button>
-                  <button onClick={() => { resetCsvModal(); setShowCsvModal(true); }} className="text-sm bg-emerald-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Upload size={15} /> นำเข้า CSV</button>
-                </div>
-              </div>
-
-              {studentList.length === 0 ? (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200">
-                  <Users size={36} className="mx-auto text-slate-300 mb-3" />
-                  <p className="font-bold text-slate-500">ยังไม่มีนักศึกษาในคลาสนี้</p>
-                  <p className="text-slate-400 text-sm mt-1">กดปุ่ม "+ เพิ่มรายชื่อ" เพื่อเพิ่มนักศึกษา</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-xl -mx-4 sm:mx-0">
-                  <table className="w-full text-left text-sm min-w-[400px]">
-                    <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-32 sm:w-40 text-xs sm:text-sm">รหัสนักศึกษา</th>
-                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-xs sm:text-sm">ชื่อ-สกุล</th>
-                        <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center w-16 sm:w-24 text-xs sm:text-sm">จัดการ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {studentList.map(student => (
-                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-600 font-mono text-[11px] sm:text-xs">{student.studentId || '-'}</td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-800 font-medium text-xs sm:text-sm">{student.name}</td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center">
-                            <button onClick={() => setStudentToDelete(student)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition" title="ลบรายชื่อนศ."><Trash2 size={14} className="sm:hidden" /><Trash2 size={16} className="hidden sm:block" /></button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            <StudentListTab
+              studentList={studentList}
+              setAddStudentId={setAddStudentId}
+              setAddStudentError={setAddStudentError}
+              setAddStudentSuccess={setAddStudentSuccess}
+              setShowAddStudentModal={setShowAddStudentModal}
+              resetCsvModal={resetCsvModal}
+              setShowCsvModal={setShowCsvModal}
+              setStudentToDelete={setStudentToDelete}
+            />
           )}
 
           {/* TAB 3: สถิติรายวัน */}
           {courseSubTab === 'daily' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              {scheduledDates.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-12 text-center">
-                  <Calendar size={36} className="mx-auto text-slate-300 mb-3 sm:mb-4" />
-                  <p className="font-bold text-slate-600 text-base sm:text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
-                  <p className="text-slate-500 text-xs sm:text-sm mt-2">ไปที่ Tab <span className="font-bold text-indigo-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
-                  <button onClick={() => setCourseSubTab('info')} className="mt-4 sm:mt-5 bg-indigo-600 text-white font-bold px-5 sm:px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
-                </div>
-              ) : (<>
-                <div className="bg-slate-50 p-3 sm:p-5 rounded-xl border border-slate-200">
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                        รายงานสถิติประจำวัน
-                        {selectedDate === todayStr && scheduledDateList.includes(todayStr) && (
-                          <span className="flex items-center gap-1.5 text-xs bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-full"><span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> LIVE</span>
-                        )}
-                      </h4>
-                      <p className="text-sm text-slate-500 mt-0.5">{selectedDate === todayStr ? 'กำลังแสดงผลวันนี้' : `วันที่ ${formatThaiDate(selectedDate)}`} {selectedDateIndex >= 0 && <span className="ml-2 text-indigo-600 font-bold">ครั้งที่ {selectedDateIndex + 1}/{scheduledDateList.length}</span>}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                      {selectedDate === todayStr && (
-                        <button onClick={() => fetchDailyAttendance(selectedDate)} className="text-sm bg-white text-slate-600 border border-slate-300 font-bold px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center"><RefreshCw size={14} className="mr-1.5" /> รีเฟรช</button>
-                      )}
-                      <button onClick={exportDailyCSV} className="text-sm bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center"><Download size={14} className="mr-1.5" /> ส่งออก CSV</button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200">
-                    <button onClick={goPrevDate} disabled={!hasPrevDate} className={`p-1.5 sm:p-2 rounded-lg border transition shrink-0 ${hasPrevDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronLeft size={16} className="sm:hidden" /><ChevronLeft size={18} className="hidden sm:block" /></button>
-                    <div className="flex-1 flex items-center justify-center min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2 bg-white border border-indigo-200 rounded-xl px-2.5 sm:px-5 py-2 sm:py-2.5 shadow-sm w-full max-w-xs sm:max-w-none sm:w-auto">
-                        <Calendar size={14} className="text-indigo-500 shrink-0 sm:hidden" />
-                        <Calendar size={16} className="text-indigo-500 shrink-0 hidden sm:block" />
-                        <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="text-xs sm:text-sm font-bold text-slate-800 outline-none bg-transparent cursor-pointer pr-1 sm:pr-2 w-full sm:w-auto">
-                          {scheduledDateList.map((d, i) => <option key={d} value={d}>{formatThaiDate(d)}{d === todayStr ? ' (วันนี้)' : ''} — ครั้งที่ {i + 1}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <button onClick={goNextDate} disabled={!hasNextDate} className={`p-1.5 sm:p-2 rounded-lg border transition shrink-0 ${hasNextDate ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-sm' : 'text-slate-300 border-slate-100 cursor-not-allowed'}`}><ChevronRight size={16} className="sm:hidden" /><ChevronRight size={18} className="hidden sm:block" /></button>
-                  </div>
-                </div>
-
-                {!loadingDaily && dailyStats.total > 0 && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="flex justify-between items-center mb-2.5">
-                      <p className="text-sm font-bold text-slate-700">ความคืบหน้าการเช็คชื่อ</p>
-                      <p className="text-sm font-bold text-slate-800">{checkedCount}/{dailyStats.total} คน <span className={`ml-1 ${checkedPercent === 100 ? 'text-emerald-600' : 'text-slate-500'}`}>({checkedPercent}%)</span></p>
-                    </div>
-                    <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex">
-                      {dailyStats.present > 0 && <div className="bg-green-500 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.present / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.present}</span></div>}
-                      {dailyStats.late > 0 && <div className="bg-yellow-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.late / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.late}</span></div>}
-                      {dailyStats.absent > 0 && <div className="bg-red-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.absent / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.absent}</span></div>}
-                      {dailyStats.leave > 0 && <div className="bg-orange-400 h-full transition-all duration-500 relative group" style={{ width: `${(dailyStats.leave / dailyStats.total) * 100}%` }}><span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold opacity-0 group-hover:opacity-100 transition">{dailyStats.leave}</span></div>}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-2.5 text-[10px] sm:text-xs font-medium text-slate-500">
-                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded"></div> ตรงเวลา ({dailyStats.present})</span>
-                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-400 rounded"></div> สาย ({dailyStats.late})</span>
-                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-400 rounded"></div> ขาดเรียน ({dailyStats.absent})</span>
-                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-orange-400 rounded"></div> ลา ({dailyStats.leave})</span>
-                      <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-slate-200 rounded border border-slate-300"></div> รอ ({dailyStats.pending})</span>
-                    </div>
-                  </div>
-                )}
-
-                {loadingDaily ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map(i => <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 text-center animate-pulse"><div className="h-3 w-20 bg-slate-100 rounded mx-auto mb-3"></div><div className="h-8 w-12 bg-slate-100 rounded mx-auto"></div></div>)}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
-                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ทั้งหมด</p><p className="text-2xl sm:text-3xl font-bold text-slate-800">{dailyStats.total}</p></div>
-                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-green-500 text-center"><p className="text-green-600 text-[10px] sm:text-xs font-bold uppercase mb-1">ตรงเวลา</p><p className="text-2xl sm:text-3xl font-bold text-green-600">{dailyStats.present}</p></div>
-                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-yellow-500 text-center"><p className="text-yellow-600 text-[10px] sm:text-xs font-bold uppercase mb-1">มาสาย</p><p className="text-2xl sm:text-3xl font-bold text-yellow-600">{dailyStats.late}</p></div>
-                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-red-500 text-center"><p className="text-red-500 text-[10px] sm:text-xs font-bold uppercase mb-1">ขาดเรียน</p><p className="text-2xl sm:text-3xl font-bold text-red-500">{dailyStats.absent}</p></div>
-                    <div className="bg-white p-3 sm:p-5 rounded-xl border border-slate-200 border-b-4 border-b-orange-500 text-center"><p className="text-orange-500 text-[10px] sm:text-xs font-bold uppercase mb-1">การลา</p><p className="text-2xl sm:text-3xl font-bold text-orange-500">{dailyStats.leave}</p></div>
-                  </div>
-                )}
-
-                {loadingDaily ? (
-                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full mx-auto"></div><p className="text-slate-500 text-sm mt-3 font-medium">กำลังโหลดข้อมูล...</p></div>
-                ) : dailyStudentRows.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center"><Users size={32} className="mx-auto text-slate-300 mb-3" /><p className="font-bold text-slate-500">ยังไม่มีนักศึกษาในคลาสนี้</p></div>
-                ) : (
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-4">
-                      <Filter size={14} className="text-slate-400" />
-                      {[
-                        { key: 'all', label: 'ทั้งหมด', count: dailyStudentRows.length },
-                        { key: 'present', label: 'ตรงเวลา', count: dailyStats.present, color: 'green' },
-                        { key: 'late', label: 'สาย', count: dailyStats.late, color: 'yellow' },
-                        { key: 'absent', label: 'ขาดเรียน', count: dailyStats.absent, color: 'red' },
-                        { key: 'leave', label: 'ลา', count: dailyStats.leave, color: 'orange' },
-                        { key: 'pending', label: 'รอดำเนินการ', count: dailyStats.pending, color: 'gray' },
-                      ].map(f => (
-                        <button key={f.key} onClick={() => setDailyFilter(f.key)} className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${dailyFilter === f.key ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300' : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300' : f.color === 'orange' ? 'bg-orange-50 text-orange-600 border-orange-300' : f.color === 'gray' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-indigo-50 text-indigo-700 border-indigo-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                          {f.label} <span className="ml-1 opacity-70">({f.count})</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl -mx-4 sm:mx-0">
-                      <table className="w-full text-left text-sm min-w-[520px]">
-                        <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-10 sm:w-16 text-center text-xs sm:text-sm">#</th>
-                            <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold w-32 sm:w-40 text-xs sm:text-sm">รหัส นศ.</th>
-                            <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-xs sm:text-sm">ชื่อ-สกุล</th>
-                            <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center text-xs sm:text-sm">เวลา</th>
-                            <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-center text-xs sm:text-sm">สถานะ</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {filteredDailyRows.map((row, idx) => (
-                            <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center text-slate-400 text-xs font-bold">{idx + 1}</td>
-                              <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-600 font-mono text-[11px] sm:text-xs">{row.studentId || '-'}</td>
-                              <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-slate-800 font-medium text-xs sm:text-sm">{row.name}</td>
-                              <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center text-slate-600 text-xs sm:text-sm font-medium">{row.checkedTime}</td>
-                              <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center"><StatusBadge status={row.attendanceStatus} /></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {dailyFilter !== 'all' && <p className="text-xs text-slate-500 font-medium mt-2">แสดง {filteredDailyRows.length} จาก {dailyStudentRows.length} คน</p>}
-                  </div>
-                )}
-              </>)}
-            </div>
+            <DailyStatsTab
+              scheduledDates={scheduledDates}
+              setCourseSubTab={setCourseSubTab}
+              selectedDate={selectedDate}
+              todayStr={todayStr}
+              scheduledDateList={scheduledDateList}
+              selectedDateIndex={selectedDateIndex}
+              fetchDailyAttendance={fetchDailyAttendance}
+              exportDailyCSV={exportDailyCSV}
+              goPrevDate={goPrevDate}
+              hasPrevDate={hasPrevDate}
+              goNextDate={goNextDate}
+              hasNextDate={hasNextDate}
+              setSelectedDate={setSelectedDate}
+              formatThaiDate={formatThaiDate}
+              loadingDaily={loadingDaily}
+              dailyStats={dailyStats}
+              checkedCount={checkedCount}
+              checkedPercent={checkedPercent}
+              dailyStudentRows={dailyStudentRows}
+              dailyFilter={dailyFilter}
+              setDailyFilter={setDailyFilter}
+              filteredDailyRows={filteredDailyRows}
+            />
           )}
 
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-
-
-
-              {/* === สรุปภาพรวม (Rule-based) === */}
-              <div className="bg-gradient-to-r from-indigo-50 to-slate-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500 opacity-5 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0">
-                      <BarChart2 size={18} className="text-indigo-600" />
-                    </div>
-                    <h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4>
-                  </div>
-                </div>
-                {loadingTerm ? (
-                  <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังคำนวณข้อมูล...</p>
-                ) : (
-                  <p className="text-indigo-900/80 text-sm sm:text-[15px] relative z-10 leading-relaxed font-medium">
-                    นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg shadow-sm border mx-1 text-sm sm:text-base ${termColor}`}>{termGrade}</span> ค่าเฉลี่ยการเข้าเรียนตลอดเทอมอยู่ที่ {avgAttendance}%
-                  </p>
-                )}
-              </div>
-
-              {/* === ตารางขาดเรียนสะสมสูงสุด === */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-indigo-600" /> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
-                  {loadingTerm ? (
-                    <p className="text-sm text-slate-500 mt-4">กำลังโหลดข้อมูล...</p>
-                  ) : (
-                    <div className="space-y-4 mt-4">
-                      {termStats.filter(s => s.absentCount > 0).sort((a, b) => b.absentCount - a.absentCount).slice(0, 5).map((s, idx) => (
-                        <div key={s.id} className="flex justify-between items-center border-b border-slate-50 pb-3">
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-400 font-bold w-4">{idx + 1}.</span>
-                            <div>
-                              <p className="text-sm font-bold text-slate-800">{s.name}</p>
-                              <p className="text-xs text-slate-500">{s.studentId}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-1 rounded block mb-1">ขาดเรียนสะสม {s.absentCount} ครั้ง</span>
-                            <span className="text-slate-500 text-[10px]">อัตราเข้าเรียน {s.attendancePercent}%</span>
-                          </div>
-                        </div>
-                      ))}
-                      {termStats.filter(s => s.absentCount > 0).length === 0 && (
-                        <div className="text-center py-6">
-                          <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2" />
-                          <p className="text-slate-600 font-bold">ไม่มีนักศึกษาที่ขาดเรียน</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <TermStatsTab
+              loadingTerm={loadingTerm}
+              termGrade={termGrade}
+              termColor={termColor}
+              avgAttendance={avgAttendance}
+              termStats={termStats}
+            />
           )}
         </div>
       </div>

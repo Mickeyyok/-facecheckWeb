@@ -3,15 +3,24 @@ import { Search, Plus, BookOpen, Clock, MapPin, X, CheckCircle, AlertTriangle, L
 import { useAuth } from '../../context/AuthContext';
 import { classService } from '../../services/classService';
 
+/**
+ * @component StudentCourses
+ * @description หน้าเพจสำหรับนักศึกษาเพื่อดูรายวิชาที่ลงทะเบียน ค้นหาวิชา เข้าร่วมคลาส และออกจากคลาส
+ * ประกอบด้วยระบบ Modal สองส่วนสำหรับการยืนยันเข้าหรือออกจากวิชา
+ */
 export default function StudentCourses() {
   const { user } = useAuth();
   
-  // States สำหรับเก็บข้อมูลคลาส
+  // ==========================================
+  // 🗃️ ส่วนจัดการ State (ตัวแปรสถานะของหน้าจอ)
+  // ==========================================
+  
+  // States สำหรับเก็บข้อมูลรายวิชาและการค้นหา
   const [courses, setCourses] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // States สำหรับ Modal เข้าร่วมคลาส
+  // States สำหรับการทำงานของหน้าต่าง Modal เข้าร่วมคลาส
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinStatus, setJoinStatus] = useState({ type: '', message: '' }); // type: 'success' | 'error' | ''
@@ -22,7 +31,15 @@ export default function StudentCourses() {
   const [courseToLeave, setCourseToLeave] = useState(null);
   const [isLeaving, setIsLeaving] = useState(false);
 
-  // ดึงข้อมูลวิชาที่ลงทะเบียนไว้
+  // ==========================================
+  // 🔄 ส่วนการดึงข้อมูลจาก API (Data Fetching)
+  // ==========================================
+
+  /**
+   * @function fetchMyCourses
+   * @description เรียกใช้ Service เพื่อดึงข้อมูลรายวิชาทั้งหมดที่นักศึกษาคนนี้ลงทะเบียนไว้
+   * และนำมาอัปเดตลงใน State `courses`
+   */
   const fetchMyCourses = async () => {
     setIsLoading(true);
     try {
@@ -47,7 +64,16 @@ export default function StudentCourses() {
     course.subjectCode?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 1. ฟังก์ชันกดยืนยันเข้าร่วมคลาส
+  // ==========================================
+  // 🖱️ ส่วนจัดการเหตุการณ์ (Event Handlers)
+  // ==========================================
+
+  /**
+   * @function handleJoinClass
+   * @description จัดการเมื่อนักศึกษากด "ยืนยันเข้าร่วม" โดยส่งรหัสวิชา (joinCode) ไปที่ Backend
+   * หากสำเร็จจะปิด Modal และดึงข้อมูลรายวิชาใหม่
+   * @param {Event} e - Event ของการ Submit Form
+   */
   const handleJoinClass = async (e) => {
     e.preventDefault();
     if (!joinCode.trim()) return;
@@ -81,7 +107,11 @@ export default function StudentCourses() {
     }
   };
 
-  // 2. ฟังก์ชันกดยืนยันออกจากคลาส
+  /**
+   * @function handleLeaveClass
+   * @description จัดการเมื่อนักศึกษากดยืนยันออกจากคลาส
+   * สั่งลบข้อมูลการลงทะเบียนใน Backend และดึงรายการวิชาอัปเดตใหม่
+   */
   const handleLeaveClass = async () => {
     if (!courseToLeave) return;
     setIsLeaving(true);

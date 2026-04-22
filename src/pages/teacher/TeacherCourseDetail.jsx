@@ -88,6 +88,13 @@ export default function TeacherCourseDetail() {
   const [loadingTerm, setLoadingTerm] = useState(false);
   const [riskAlerts, setRiskAlerts] = useState([]);
 
+  // AI Analysis states
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [aiError, setAiError] = useState('');
+  // Cache key to avoid repeated Gemini calls for same data
+  const aiCacheKeyRef = React.useRef('');
+
   // --- คำนวณสถานะสแกน real-time (เปิด/ปิดตามเวลาขาดเรียน) ---
   const [nowTime, setNowTime] = useState(new Date());
   useEffect(() => {
@@ -307,10 +314,77 @@ export default function TeacherCourseDetail() {
         }));
 
       setRiskAlerts(alerts);
+
+      // ❌ ไม่เรียก Gemini อัตโนมัติ — ให้ผู้ใช้กดปุ่มเองเพื่อประหยัด quota
     } catch (error) {
       console.error("Error fetching term stats", error);
     } finally {
       setLoadingTerm(false);
+    }
+  };
+
+  // ✅ เรียก Gemini API จริง วิเคราะห์ข้อมูลการเข้าเรียน
+  const callGeminiAnalysis = async (stats, totalClasses, courseName, courseCode) => {
+    setLoadingAi(true);
+    setAiError('');
+    setAiAnalysis(null);
+    try {
+      const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!GEMINI_API_KEY) throw new Error('ไม่พบ GEMINI API Key ใน .env');
+
+      const avgAtt = Math.round(stats.reduce((sum, s) => sum + s.attendancePercent, 0) / stats.length);
+      const riskStudents = stats.filter(s => s.isRisk);
+      const top5Absent = [...stats].sort((a, b) => b.absentCount - a.absentCount).slice(0, 5);
+
+      const prompt = `คุณคือผู้เชี่ยวชาญด้านการศึกษา วิเคราะห์ข้อมูลการเข้าเรียนของนักศึกษาในวิชา "${courseName || 'ไม่ระบุ'}" (รหัส ${courseCode || '-'}) แล้วให้รายงานเป็นภาษาไทย:
+
+สรุปข้อมูลคลาส:
+- จำนวนนักศึกษาทั้งหมด: ${stats.length} คน
+- จำนวนครั้งที่เปิดสอนแล้ว: ${totalClasses} ครั้ง
+- ค่าเฉลี่ยการเข้าเรียนทั้งคลาส: ${avgAtt}%
+- นักศึกษาที่มีความเสี่ยง (ขาดเกินเกณฑ์): ${riskStudents.length} คน
+- นักศึกษาที่เข้าเรียนดี (≥90%): ${stats.filter(s => s.attendancePercent >= 90).length} คน
+
+รายชื่อนักศึกษาขาดเรียนมากที่สุด 5 อันดับ:
+${top5Absent.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ขาด ${s.absentCount} ครั้ง, เข้าเรียน ${s.attendancePercent}%`).join('\n')}
+
+ตอบในรูปแบบ JSON เท่านั้น (ไม่ต้องใส่ markdown):
+{
+  "overallSummary": "สรุปภาพรวมคลาส 2-3 ประโยค",
+  "riskLevel": "ต่ำ หรือ ปานกลาง หรือ สูง หรือ วิกฤต",
+  "keyInsights": ["insight 1", "insight 2", "insight 3"],
+  "recommendations": ["คำแนะนำ 1", "คำแนะนำ 2", "คำแนะนำ 3"],
+  "urgentActions": "สิ่งที่ควรทำทันทีในประโยคเดียว หรือ null ถ้าไม่มี"
+}`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData?.error?.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('รูปแบบผลลัพธ์จาก AI ไม่ถูกต้อง');
+      const parsed = JSON.parse(jsonMatch[0]);
+      setAiAnalysis(parsed);
+    } catch (err) {
+      console.error('Gemini AI Error:', err);
+      setAiError(err.message || 'ไม่สามารถเชื่อมต่อ AI ได้');
+    } finally {
+      setLoadingAi(false);
     }
   };
 
@@ -1198,14 +1272,22 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="bg-gradient-to-r from-indigo-50 to-indigo-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
+
+
+
+              {/* === สรุปภาพรวม (Rule-based) === */}
+              <div className="bg-gradient-to-r from-indigo-50 to-slate-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500 opacity-5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
-                  <div className="flex items-center space-x-2 sm:space-x-3"><div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0"></div><h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
-                  <span className="flex items-center bg-gradient-to-r from-indigo-600 to-indigo-600 text-white text-[10px] sm:text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full shadow-md self-start sm:self-auto shrink-0"><Brain size={12} className="mr-1 sm:hidden" /><Brain size={14} className="mr-1.5 hidden sm:block" /> วิเคราะห์โดย AI</span>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0">
+                      <BarChart2 size={18} className="text-indigo-600" />
+                    </div>
+                    <h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4>
+                  </div>
                 </div>
                 {loadingTerm ? (
-                  <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังวิเคราะห์ข้อมูลการเข้าเรียน...</p>
+                  <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังคำนวณข้อมูล...</p>
                 ) : (
                   <p className="text-indigo-900/80 text-sm sm:text-[15px] relative z-10 leading-relaxed font-medium">
                     นักศึกษามีความรับผิดชอบในเกณฑ์ <span className={`font-extrabold px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg shadow-sm border mx-1 text-sm sm:text-base ${termColor}`}>{termGrade}</span> ค่าเฉลี่ยการเข้าเรียนตลอดเทอมอยู่ที่ {avgAttendance}%
@@ -1213,6 +1295,7 @@ export default function TeacherCourseDetail() {
                 )}
               </div>
 
+              {/* === ตารางขาดเรียนสะสมสูงสุด === */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
                   <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-indigo-600" /> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
@@ -1244,7 +1327,6 @@ export default function TeacherCourseDetail() {
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
           )}

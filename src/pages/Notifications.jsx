@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle, FileText, CheckCircle2, X, Loader2, Brain, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, Mail, CheckCircle, Trash2, XCircle, FileText, CheckCircle2, X, Loader2, Brain, Send, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../services/notificationService';
 import { classService } from '../services/classService';
 import { attendanceService } from '../services/attendanceService';
 import { showSuccess, showError } from '../utils/alertPopup';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export default function Notifications({ role }) {
   const { user } = useAuth();
@@ -29,7 +28,14 @@ export default function Notifications({ role }) {
   const [alertToSend, setAlertToSend] = useState(null);
   const [aiMessage, setAiMessage] = useState("");
   const [processingAlertId, setProcessingAlertId] = useState(null);
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+
+  // AI Analysis states
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [allCourseStats, setAllCourseStats] = useState([]);
+  const [courseList, setCourseList] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState('all');
 
   useEffect(() => {
     if (user?.id) {
@@ -69,7 +75,9 @@ export default function Notifications({ role }) {
     try {
       setLoading(true);
       const classes = await classService.getClassesByTeacher(user.id);
+      setCourseList(classes.map(c => ({ id: c.id, code: c.subjectCode, name: c.subjectName })));
       let allRiskAlerts = [];
+      let allStudentStats = [];
       let alertIdCounter = 1;
       
       for (const course of classes) {
@@ -109,7 +117,15 @@ export default function Notifications({ role }) {
              
              const isRisk = pastDatesCount > 0 && (absentPercent >= 20 || totalAbsent >= (maxAbsences - 1));
              
-             if (isRisk) {
+              allStudentStats.push({
+                  name: student.name, studentId: student.studentId,
+                  courseName: course.subjectName, courseCode: course.subjectCode,
+                  presentCount, lateCount, absentCount: totalAbsent,
+                  attendancePercent: pastDatesCount > 0 ? Math.round(((presentCount + lateCount) / pastDatesCount) * 100) : 100,
+                  isRisk
+              });
+
+              if (isRisk) {
                  allRiskAlerts.push({
                      id: alertIdCounter++,
                      studentUserId: student.studentUserId || student.id,
@@ -125,11 +141,38 @@ export default function Notifications({ role }) {
       }
       
       setRiskAlerts(allRiskAlerts);
+      setAllCourseStats(allStudentStats);
     } catch (err) {
       console.error('Error fetching AI alerts:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+
+  // Gemini AI Analysis
+  const callGeminiAnalysis = async (stats) => {
+    setLoadingAi(true); setAiError(''); setAiAnalysis(null);
+    try {
+      const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!GEMINI_API_KEY) throw new Error('ไม่พบ GEMINI API Key ใน .env');
+      const riskStudents = stats.filter(s => s.isRisk);
+      const avgAtt = stats.length > 0 ? Math.round(stats.reduce((sum, s) => sum + s.attendancePercent, 0) / stats.length) : 0;
+      const top5 = [...stats].sort((a, b) => b.absentCount - a.absentCount).slice(0, 5);
+      const coursesInvolved = [...new Set(stats.map(s => s.courseCode + ' ' + s.courseName))].join(', ');
+      const prompt = `คุณคือผู้เชี่ยวชาญด้านการศึกษา วิเคราะห์ข้อมูลการเข้าเรียนของนักศึกษาแล้วให้รายงานเป็นภาษาไทย:\n\nรายวิชาที่วิเคราะห์: ${coursesInvolved}\nสรุปข้อมูล:\n- จำนวนนักศึกษาทั้งหมด: ${stats.length} คน\n- ค่าเฉลี่ยการเข้าเรียน: ${avgAtt}%\n- นักศึกษาที่มีความเสี่ยง: ${riskStudents.length} คน\n- นักศึกษาเข้าเรียนดี (>=90%): ${stats.filter(s => s.attendancePercent >= 90).length} คน\n\nนักศึกษาขาดเรียนมากที่สุด 5 อันดับ:\n${top5.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ${s.courseName} - ขาด ${s.absentCount} ครั้ง, เข้าเรียน ${s.attendancePercent}%`).join('\n')}\n\nตอบในรูปแบบ JSON เท่านั้น (ไม่ต้องใส่ markdown):\n{\n  "overallSummary": "สรุปภาพรวม 2-3 ประโยค",\n  "riskLevel": "ต่ำ หรือ ปานกลาง หรือ สูง หรือ วิกฤต",\n  "keyInsights": ["insight 1", "insight 2", "insight 3"],\n  "recommendations": ["คำแนะนำ 1", "คำแนะนำ 2", "คำแนะนำ 3"],\n  "urgentActions": "สิ่งที่ควรทำทันทีในประโยคเดียว หรือ null ถ้าไม่มี"\n}`;
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1024 } })
+      });
+      if (!response.ok) { const errData = await response.json(); throw new Error(errData?.error?.message || `HTTP ${response.status}`); }
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('รูปแบบผลลัพธ์จาก AI ไม่ถูกต้อง');
+      setAiAnalysis(JSON.parse(jsonMatch[0]));
+    } catch (err) { console.error('Gemini AI Error:', err); setAiError(err.message || 'ไม่สามารถเชื่อมต่อ AI ได้'); }
+    finally { setLoadingAi(false); }
   };
 
   const markAllAsRead = async () => {
@@ -174,46 +217,9 @@ export default function Notifications({ role }) {
 
   const openAlertModal = (alert) => {
     setAlertToSend(alert);
-    setAiMessage("");
+    setAiMessage(`ถึง ${alert.studentName},\n\nเนื่องจากคุณมีสถานะการเข้าเรียนในวิชา ${alert.courseCode} ${alert.courseName} เข้าข่ายความเสี่ยง (${alert.issue})\n\nขอให้ติดต่ออาจารย์ผู้สอนโดยด่วนเพื่อชี้แจงเหตุผล\n\nจึงเรียนมาเพื่อทราบและดำเนินการ`);
     setShowSendAlertModal(true);
   };
-
-  const handleGenerateWithGemini = async () => {
-    if (!alertToSend) return;
-    try {
-      setIsGeneratingAi(true);
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      
-      if (!apiKey || apiKey === "YOUR_API_KEY_HERE") {
-        showError("ยังไม่ได้ตั้งค่า API Key", "กรุณาใส่ VITE_GEMINI_API_KEY ในไฟล์ .env ของ Frontend");
-        return;
-      }
-
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
-      const prompt = `เขียนจดหมายตักเตือนนักศึกษาชื่อ ${alertToSend.studentName} ที่มีปัญหา ${alertToSend.issue} ในรายวิชา ${alertToSend.courseCode} ${alertToSend.courseName} โดยให้เป็นจดหมายที่เขียนจากอาจารย์ผู้สอน สั้น กระชับ สุภาพ เป็นทางการ และขอให้นักศึกษาติดต่อกลับเพื่อชี้แจงเหตุผลโดยด่วน (เขียนแบบรวดเดียว ไม่ต้องมีช่องว่างให้เติมคำ)`;
-
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      setAiMessage(response.text());
-    } catch (error) {
-      console.error(error);
-      
-      // Handle high demand/503 error specifically
-      if (error.message?.includes("503") || error.message?.includes("high demand")) {
-        showError(
-          "Gemini AI ไม่พร้อมใช้งานชั่วคราว", 
-          "ขณะนี้มีผู้ใช้งานจำนวนมากเกินไป (High Demand) กรุณารอสักครู่แล้วกดลองใหม่อีกครั้งครับ"
-        );
-      } else {
-        showError("เกิดข้อผิดพลาดจาก Gemini API", error.message);
-      }
-    } finally {
-      setIsGeneratingAi(false);
-    }
-  };
-
   const handleSendAlertToStudent = async () => {
     if (!alertToSend || !aiMessage.trim()) return;
 
@@ -318,6 +324,86 @@ export default function Notifications({ role }) {
         /* TEACHER VIEW (AI Alerts across all courses) */
         /* ============================================ */
         <>
+
+          {/* === AI Analysis Card (Gemini) === */}
+          <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-purple-50 shadow-sm overflow-hidden mb-6">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center"><Brain size={20} className="text-white" /></div>
+                <div>
+                  <h4 className="text-white font-extrabold text-sm sm:text-base">AI ผู้ช่วยวิเคราะห์ความเสี่ยง</h4>
+                  <p className="text-indigo-200 text-[11px] sm:text-xs"> Google Gemini AI · วิเคราะห์ข้อมูลจากระบบ</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={selectedCourse} onChange={e => { setSelectedCourse(e.target.value); setAiAnalysis(null); setAiError(''); }} className="bg-white/20 text-white text-xs font-bold pl-3 pr-6 py-2 rounded-xl border border-white/30 outline-none cursor-pointer" style={{WebkitAppearance:'none',MozAppearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 8px center'}}>
+                  <option value="all" style={{color:'#1e293b'}}>ทุกรายวิชา</option>
+                  {courseList.map(c => (<option key={c.id} value={c.code} style={{color:'#1e293b'}}>{c.code} {c.name}</option>))}
+                </select>
+                <button onClick={() => { const filtered = selectedCourse === 'all' ? allCourseStats : allCourseStats.filter(s => s.courseCode === selectedCourse); if (filtered.length > 0) callGeminiAnalysis(filtered); }} disabled={loadingAi || loading || allCourseStats.length === 0} className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold px-3 py-2 rounded-xl transition border border-white/30">
+                  <RefreshCw size={13} className={loadingAi ? 'animate-spin' : ''} />
+                  <span className="hidden sm:inline">{loadingAi ? 'กำลังวิเคราะห์...' : 'วิเคราะห์ใหม่'}</span>
+                </button>
+              </div>
+            </div>
+            <div className="p-4 sm:p-6">
+              {loadingAi ? (
+                <div className="space-y-3 py-2">
+                  <div className="flex items-center gap-3 text-indigo-600">
+                    <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                    <span className="text-sm font-semibold animate-pulse"> Gemini AI กำลังวิเคราะห์ข้อมูลการเข้าเรียน...</span>
+                  </div>
+                  <div className="space-y-2 mt-2">
+                    <div className="h-3 bg-indigo-100 rounded-full animate-pulse w-full"></div>
+                    <div className="h-3 bg-indigo-100 rounded-full animate-pulse w-4/5"></div>
+                    <div className="h-3 bg-indigo-100 rounded-full animate-pulse w-3/5"></div>
+                  </div>
+                </div>
+              ) : aiError ? (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-center">
+                  <AlertCircle size={28} className="mx-auto text-red-400 mb-2" />
+                  <p className="text-red-600 font-bold text-sm">ไม่สามารถเชื่อมต่อ AI ได้</p>
+                  <p className="text-red-400 text-xs mt-1 font-mono break-all">{aiError}</p>
+                  <button onClick={() => { const filtered = selectedCourse === 'all' ? allCourseStats : allCourseStats.filter(s => s.courseCode === selectedCourse); callGeminiAnalysis(filtered); }} className="mt-3 text-xs bg-red-100 text-red-600 font-bold px-4 py-2 rounded-lg hover:bg-red-200 transition">ลองใหม่อีกครั้ง</button>
+                </div>
+              ) : aiAnalysis ? (
+                <div className="space-y-5">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className={`text-xs font-extrabold px-3 py-1.5 rounded-full border ${aiAnalysis.riskLevel === 'วิกฤต' ? 'bg-red-100 text-red-700 border-red-300' : aiAnalysis.riskLevel === 'สูง' ? 'bg-orange-100 text-orange-700 border-orange-300' : aiAnalysis.riskLevel === 'ปานกลาง' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : 'bg-emerald-100 text-emerald-700 border-emerald-300'}`}>
+                        {aiAnalysis.riskLevel === 'วิกฤต' ? '' : aiAnalysis.riskLevel === 'สูง' ? '' : aiAnalysis.riskLevel === 'ปานกลาง' ? '' : ''} ความเสี่ยงระดับ: {aiAnalysis.riskLevel}
+                      </span>
+                    </div>
+                    <p className="text-slate-700 text-sm leading-relaxed font-medium">{aiAnalysis.overallSummary}</p>
+                  </div>
+                  {aiAnalysis.keyInsights?.length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5"><Sparkles size={13} className="text-indigo-500" /> ข้อสังเกตสำคัญจาก AI</h5>
+                      <ul className="space-y-2.5">{aiAnalysis.keyInsights.map((insight, i) => (<li key={i} className="flex items-start gap-2.5 text-sm text-slate-700"><span className="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0 mt-0.5">{i + 1}</span>{insight}</li>))}</ul>
+                    </div>
+                  )}
+                  {aiAnalysis.recommendations?.length > 0 && (
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                      <h5 className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">คำแนะนำสำหรับอาจารย์</h5>
+                      <ul className="space-y-2">{aiAnalysis.recommendations.map((rec, i) => (<li key={i} className="flex items-start gap-2 text-sm text-indigo-800"><CheckCircle size={14} className="text-indigo-500 shrink-0 mt-0.5" />{rec}</li>))}</ul>
+                    </div>
+                  )}
+                  {aiAnalysis.urgentActions && aiAnalysis.urgentActions !== 'null' && (
+                    <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                      <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                      <div><p className="text-xs font-extrabold text-rose-600 mb-0.5">ต้องดำเนินการทันที</p><p className="text-sm text-rose-700 font-medium">{aiAnalysis.urgentActions}</p></div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Brain size={36} className="mx-auto text-indigo-200 mb-3" />
+                  <p className="text-slate-600 font-bold text-sm">พร้อมวิเคราะห์ด้วย AI</p>
+                  <p className="text-slate-400 text-xs mt-1 mb-4">เลือกรายวิชา แล้วกดปุ่ม <span className="font-semibold text-indigo-500">วิเคราะห์ใหม่</span></p>
+                </div>
+              )}
+            </div>
+          </div>
           {riskAlerts.length === 0 ? (
             <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
               <CheckCircle size={48} className="text-emerald-400 mx-auto mb-4" />
@@ -431,14 +517,6 @@ export default function Notifications({ role }) {
             <div className="p-6">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">ข้อความ (แก้ไขได้)</label>
-                <button 
-                  onClick={handleGenerateWithGemini}
-                  disabled={isGeneratingAi}
-                  className="text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center transition-colors disabled:opacity-50"
-                >
-                  {isGeneratingAi && <Loader2 size={14} className="animate-spin mr-1.5" />}
-                  ร่างด้วย Gemini AI
-                </button>
               </div>
               <textarea 
                 className="w-full h-40 p-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:border-red-400 focus:ring-4 focus:ring-red-50 text-sm font-medium text-slate-700 transition-all resize-none"

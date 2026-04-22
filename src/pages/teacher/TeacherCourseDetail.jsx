@@ -136,10 +136,6 @@ export default function TeacherCourseDetail() {
   const [showCancelClassConfirm, setShowCancelClassConfirm] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState(null);
-  const [showSendAlertModal, setShowSendAlertModal] = useState(false);
-  const [alertToSend, setAlertToSend] = useState(null);
-  const [alertToDelete, setAlertToDelete] = useState(null);
-  const [aiMessage, setAiMessage] = useState("");
 
   // CSV Import states
   const [showCsvModal, setShowCsvModal] = useState(false);
@@ -617,15 +613,6 @@ export default function TeacherCourseDetail() {
     }
   };
 
-  const handleStartAttendance = async () => {
-    try {
-      await classService.notifyStartCheckIn(courseId);
-      showSuccess("🚀 เปิดระบบเช็กชื่อแล้ว!", "ส่งแจ้งเตือนหานักศึกษาทุกคนเรียบร้อย");
-    } catch (error) {
-      showError("ไม่สามารถส่งแจ้งเตือนได้", error.response?.data?.message || error.message);
-    }
-  };
-
   const handleCancelClass = async () => {
     try {
       // ✅ Backend จะลบวันนี้ออกจาก scheduledDates + ส่ง notification ในครั้งเดียว
@@ -640,27 +627,6 @@ export default function TeacherCourseDetail() {
       showSuccess('ยกเลิกคลาสวันนี้เรียบร้อยแล้ว!', 'ลบออกจากตารางและส่งแจ้งเตือนนักศึกษาแล้ว');
     } catch (error) {
       showError('ไม่สามารถยกเลิกคลาสได้', error.response?.data?.message || error.message);
-    }
-  };
-
-  const openAlertModal = (alert) => {
-    setAlertToSend(alert);
-    setAiMessage(`เรียน ${alert.studentName},\n\nระบบ FaceCheck ตรวจพบว่าคุณมีสถิติ${alert.issue} ซึ่งอาจส่งผลต่อการประเมินผลการเรียน\n\nโปรดติดต่ออาจารย์ผู้สอนด่วนเพื่อชี้แจงเหตุผล\n\nด้วยความเคารพ\nผู้สอนวิชา ${courseInfo.name}`);
-    setShowSendAlertModal(true);
-  };
-
-  const handleSendAlertToStudent = async () => {
-    if (!alertToSend || !aiMessage.trim()) return;
-
-    try {
-      await notificationService.sendAiAlert(alertToSend.studentUserId, aiMessage);
-
-      setRiskAlerts(riskAlerts.map(a => a.id === alertToSend.id ? { ...a, status: 'sent' } : a));
-      setShowSendAlertModal(false);
-      setAlertToSend(null);
-      showSuccess('ส่งการแจ้งเตือนเรียบร้อยแล้ว', 'แจ้งเตือนเข้าระบบของนักศึกษาแล้ว');
-    } catch (error) {
-      showError('ไม่สามารถส่งแจ้งเตือนได้', error.response?.data?.message || error.message);
     }
   };
 
@@ -771,8 +737,7 @@ export default function TeacherCourseDetail() {
               { id: 'info', label: 'ข้อมูลวิชา' },
               { id: 'students', label: 'รายชื่อนักศึกษา' },
               { id: 'daily', label: 'สถิติรายวัน' },
-              { id: 'term', label: 'สถิติรายเทอม' },
-              { id: 'alerts', label: 'AI แจ้งเตือน', badge: riskAlerts.filter(a => a.status === 'pending').length }
+              { id: 'term', label: 'สถิติรายเทอม' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1280,78 +1245,7 @@ export default function TeacherCourseDetail() {
                   )}
                 </div>
 
-                <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">เฝ้าระวังกลุ่มเสี่ยง (AI Alert)</h4>
-                  <div className="space-y-4">
-                    {loadingTerm ? (
-                      <p className="text-sm text-slate-500 mt-4">กำลังวิเคราะห์ความเสี่ยง...</p>
-                    ) : riskAlerts.length === 0 ? (
-                      <div className="text-center py-6 text-emerald-500 font-bold bg-emerald-50 rounded-lg">
-                        <CheckCircle size={24} className="mx-auto mb-2" /> ไม่มีกลุ่มเสี่ยง
-                      </div>
-                    ) : (
-                      riskAlerts.slice(0, 4).map(alert => (
-                        <div key={alert.id} className="flex justify-between items-start border-b border-slate-50 pb-3">
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{alert.studentName}</p>
-                            <p className="text-[11px] text-red-500 mt-0.5">{alert.issue}</p>
-                          </div>
-                          <button onClick={() => setCourseSubTab('alerts')} className="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-200 transition whitespace-nowrap ml-2">จัดการ</button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
-            </div>
-          )}
-
-          {/* TAB 5: AI แจ้งเตือนความเสี่ยง */}
-          {courseSubTab === 'alerts' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-4">
-                <h4 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center"><Brain className="mr-2 text-blue-600 shrink-0" size={20} /> AI วิเคราะห์ความเสี่ยง</h4>
-                <p className="text-xs sm:text-sm text-slate-500">แจ้งเตือนอัตโนมัติเมื่อขาดเรียนเกิน 20% หรือ {maxAbsences - 1} ครั้งขึ้นไป</p>
-              </div>
-              {loadingTerm ? (
-                <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
-                  <div className="animate-spin w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto mb-4"></div>
-                  <p className="text-blue-600 font-bold">AI กำลังวิเคราะห์และตรวจสอบเงื่อนไขความเสี่ยง...</p>
-                </div>
-              ) : riskAlerts.length === 0 ? (
-                <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm">
-                  <CheckCircle size={40} className="mx-auto text-emerald-400 mb-4" />
-                  <p className="font-bold text-slate-800 text-lg">ไม่มีนักศึกษาในกลุ่มเสี่ยงหักคะแนน</p>
-                  <p className="text-sm text-slate-500 mt-2">นักศึกษาทุกคนมีความรับผิดชอบในการเข้าเรียนอยู่ในเกณฑ์ที่น่าพอใจ</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {riskAlerts.map(alert => (
-                    <div key={alert.id} className="bg-red-50 p-5 rounded-xl border border-red-100 shadow-sm relative group transition-all hover:shadow-md">
-                      <div className="flex items-start mb-4">
-                        <div className="bg-red-100 p-2 rounded-lg text-red-600 mr-3 shrink-0"><AlertTriangle size={20} /></div>
-                        <div>
-                          <h5 className="font-bold text-red-800 mb-1">กลุ่มเสี่ยงเกินเกณฑ์ขาดเรียน</h5>
-                          <p className="text-sm text-red-700">
-                            <span className="font-bold text-base block my-1">{alert.studentName}</span>
-                            {alert.issue}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center mt-4">
-                        {alert.status === 'pending' ? (
-                          <button onClick={() => openAlertModal(alert)} className="text-sm bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 transition shadow-sm flex items-center w-full justify-center"> ส่งแจ้งเตือนเข้าระบบนักศึกษา</button>
-                        ) : (
-                          <span className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg font-bold flex items-center w-full justify-center"><CheckCircle size={16} className="mr-1.5" /> ส่งแจ้งเตือนเข้าระบบ</span>
-                        )}
-                      </div>
-                      <div className="absolute top-4 right-4">
-                        <button onClick={() => setAlertToDelete(alert)} className="text-red-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-100 rounded-lg" title="ลบการแจ้งเตือน"><Trash2 size={18} /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -1407,26 +1301,7 @@ export default function TeacherCourseDetail() {
         </div>
       )}
 
-      {showSendAlertModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 animate-in zoom-in-95">
-            <button onClick={() => setShowSendAlertModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <div className="flex items-center space-x-2 mb-4 text-blue-700"><Brain size={24} /><h3 className="text-xl font-bold">ส่งแจ้งเตือนเข้าระบบนักศึกษา</h3></div>
-            <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
-              <div className="mb-2 text-sm"><span className="font-bold">ถึง:</span> {alertToSend?.studentName}</div>
-              <textarea
-                className="w-full h-32 bg-white border border-slate-200 p-2 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-blue-500"
-                value={aiMessage}
-                onChange={(e) => setAiMessage(e.target.value)}
-              ></textarea>
-            </div>
-            <div className="flex space-x-3">
-              <button onClick={() => setShowSendAlertModal(false)} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-50">ยกเลิก</button>
-              <button onClick={handleSendAlertToStudent} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700"><Mail size={16} className="inline mr-2" /> ยืนยันการส่ง</button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {showCancelClassConfirm && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
@@ -1477,7 +1352,7 @@ export default function TeacherCourseDetail() {
 
             <div className="p-6 sm:p-8 bg-slate-50/50">
 
-              {/* ✨ UI แจ้งเตือน Error / Success ✨ */}
+              {/*  UI แจ้งเตือน Error / Success  */}
               <div className={`transition-all duration-300 overflow-hidden ${addStudentError ? 'max-h-24 opacity-100 mb-5' : 'max-h-0 opacity-0 m-0'}`}>
                 <div className="bg-rose-50 text-rose-600 px-4 py-3.5 rounded-2xl flex items-start border border-rose-100 text-sm font-bold shadow-sm">
                   <AlertCircle className="mr-2.5 shrink-0 mt-0.5" size={18} />

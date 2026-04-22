@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, History, Bell, LogOut, Users, Menu, X } from 'lucide-react';
+import { LayoutDashboard, BookOpen, History, Bell, LogOut, Users, Menu, X, FileText, Brain, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import utccLogo from '../../assets/UTCC-Official-1.png';
 import { notificationService } from '../../services/notificationService';
@@ -96,7 +96,11 @@ export default function MainLayout({ role }) {
             className={({ isActive }) => `w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <div className="flex items-center space-x-3">
-              <Bell size={20} /><span>การแจ้งเตือน</span>
+              {role === 'teacher' ? (
+                <><Brain size={20} className="text-blue-400" /><span>AI ผู้ช่วยวิเคราะห์</span></>
+              ) : (
+                <><Bell size={20} /><span>การแจ้งเตือน</span></>
+              )}
             </div>
             {unreadNotificationsCount > 0 && (
               <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
@@ -104,6 +108,18 @@ export default function MainLayout({ role }) {
               </span>
             )}
           </NavLink>
+
+          {/* คำขอลา (เฉพาะอาจารย์) */}
+          {role === 'teacher' && (
+            <NavLink 
+              to={`/${role}/leave-requests`} 
+              className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-[#1a237e] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              <div className="flex items-center space-x-3">
+                <FileText size={20} /><span>คำขอลา</span>
+              </div>
+            </NavLink>
+          )}
         </nav>
         
         {/* เมนูออกจากระบบ */}

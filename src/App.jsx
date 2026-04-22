@@ -10,6 +10,7 @@ import FaceRegistration from './pages/student/FaceRegistration';
 // ✅ ใช้ชื่อ Component ใหม่ที่สื่อถึง Teacher
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherCourseDetail from './pages/teacher/TeacherCourseDetail';
+import LeaveRequests from './pages/teacher/LeaveRequests';
 
 import Notifications from './pages/Notifications';
 import ProtectedRoute from './components/common/ProtectedRoute'; 
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="dashboard" element={<TeacherDashboard />} />
           <Route path="course/:courseId" element={<TeacherCourseDetail />} />
           <Route path="notifications" element={<Notifications role="teacher" />} />
+          <Route path="leave-requests" element={<LeaveRequests />} />
         </Route>
       </Route>
       

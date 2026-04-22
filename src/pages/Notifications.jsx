@@ -199,7 +199,16 @@ export default function Notifications({ role }) {
       setAiMessage(response.text());
     } catch (error) {
       console.error(error);
-      showError("เกิดข้อผิดพลาดจาก Gemini API", error.message);
+      
+      // Handle high demand/503 error specifically
+      if (error.message?.includes("503") || error.message?.includes("high demand")) {
+        showError(
+          "Gemini AI ไม่พร้อมใช้งานชั่วคราว", 
+          "ขณะนี้มีผู้ใช้งานจำนวนมากเกินไป (High Demand) กรุณารอสักครู่แล้วกดลองใหม่อีกครั้งครับ"
+        );
+      } else {
+        showError("เกิดข้อผิดพลาดจาก Gemini API", error.message);
+      }
     } finally {
       setIsGeneratingAi(false);
     }
@@ -239,7 +248,7 @@ export default function Notifications({ role }) {
           </p>
         </div>
         {role === 'student' && notifications.filter(n => !n.isRead).length > 0 && (
-          <button onClick={markAllAsRead} className="text-sm text-blue-600 hover:underline font-medium">
+          <button onClick={markAllAsRead} className="text-sm text-indigo-600 hover:underline font-medium">
             ทำเครื่องหมายว่าอ่านแล้วทั้งหมด
           </button>
         )}
@@ -247,7 +256,7 @@ export default function Notifications({ role }) {
 
       {loading ? (
         <div className="flex justify-center py-20">
-           <Loader2 className="animate-spin text-blue-500" size={36} />
+           <Loader2 className="animate-spin text-indigo-500" size={36} />
         </div>
       ) : role === 'student' ? (
         /* ============================================ */
@@ -265,12 +274,12 @@ export default function Notifications({ role }) {
                 <div 
                   key={note.id} 
                   onClick={() => handleViewNotification(note)}
-                  className={`p-5 rounded-xl border flex gap-4 transition-all cursor-pointer relative group pr-14 shadow-sm hover:shadow-md ${note.isRead ? 'bg-white border-slate-200' : 'bg-blue-50/50 border-blue-200'}`}
+                  className={`p-5 rounded-xl border flex gap-4 transition-all cursor-pointer relative group pr-14 shadow-sm hover:shadow-md ${note.isRead ? 'bg-white border-slate-200' : 'bg-indigo-50/50 border-indigo-200'}`}
                 >
                   <div className={`mt-1 flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
                     note.type === 'warning' ? 'bg-yellow-100 text-yellow-600' : 
                     note.type === 'danger' ? 'bg-red-100 text-red-600' : 
-                    'bg-blue-100 text-blue-600'
+                    'bg-indigo-100 text-indigo-600'
                   }`}>
                     {note.type === 'warning' && <AlertTriangle size={24} />}
                     {note.type === 'danger' && <Mail size={24} />}
@@ -279,7 +288,7 @@ export default function Notifications({ role }) {
                   
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
-                      <h4 className={`font-bold text-lg ${note.isRead ? 'text-slate-700' : 'text-blue-900'}`}>{note.title}</h4>
+                      <h4 className={`font-bold text-lg ${note.isRead ? 'text-slate-700' : 'text-indigo-900'}`}>{note.title}</h4>
                       <span className="text-xs text-slate-400 font-medium ml-4">{note.time}</span>
                     </div>
                     <p className={`mt-1 text-sm ${note.isRead ? 'text-slate-500' : 'text-slate-800'} line-clamp-2 leading-relaxed`}>{note.message}</p>
@@ -287,7 +296,7 @@ export default function Notifications({ role }) {
                   
                   {!note.isRead && (
                     <div className="absolute top-1/2 -translate-y-1/2 right-14">
-                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
                     </div>
                   )}
 
@@ -363,7 +372,7 @@ export default function Notifications({ role }) {
               <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
                 selectedNotification.type === 'warning' ? 'bg-yellow-100 text-yellow-600' : 
                 selectedNotification.type === 'danger' ? 'bg-red-100 text-red-600' : 
-                'bg-blue-100 text-blue-600'
+                'bg-indigo-100 text-indigo-600'
               }`}>
                 {selectedNotification.type === 'warning' && <AlertTriangle size={24} />}
                 {selectedNotification.type === 'danger' && <Mail size={24} />}
@@ -381,7 +390,7 @@ export default function Notifications({ role }) {
               </p>
             </div>
 
-            <button onClick={() => setSelectedNotification(null)} className="w-full mt-6 text-white py-3 rounded-xl font-bold transition-all active:scale-95 bg-blue-600 hover:bg-blue-700 shadow-md">
+            <button onClick={() => setSelectedNotification(null)} className="w-full mt-6 text-white py-3 rounded-xl font-bold transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 shadow-md">
               ปิดหน้าต่าง
             </button>
           </div>
@@ -425,7 +434,7 @@ export default function Notifications({ role }) {
                 <button 
                   onClick={handleGenerateWithGemini}
                   disabled={isGeneratingAi}
-                  className="text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg flex items-center transition-colors disabled:opacity-50"
+                  className="text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center transition-colors disabled:opacity-50"
                 >
                   {isGeneratingAi && <Loader2 size={14} className="animate-spin mr-1.5" />}
                   ร่างด้วย Gemini AI

@@ -158,10 +158,10 @@ export default function TeacherDashboard() {
               placeholder="ค้นหารายวิชา..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>
-          <button onClick={() => setShowCreateClassModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-blue-700 transition shadow-sm w-full sm:w-auto">
+          <button onClick={() => setShowCreateClassModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium flex justify-center items-center space-x-2 hover:bg-indigo-700 transition shadow-sm w-full sm:w-auto">
             <Plus size={16} /><span>สร้างคลาส</span>
           </button>
         </div>
@@ -170,7 +170,7 @@ export default function TeacherDashboard() {
       {/* Loading State */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader2 className="animate-spin text-blue-500" size={36} />
+          <Loader2 className="animate-spin text-indigo-500" size={36} />
           <span className="ml-3 text-slate-500">กำลังโหลดข้อมูล...</span>
         </div>
       ) : filteredCourses.length === 0 ? (
@@ -193,7 +193,7 @@ export default function TeacherDashboard() {
                       {course.scheduleDay || 'ยังไม่ระบุวัน'} {course.term && `• เทอม ${course.term}`}
                     </span>
                     <h4 className="text-lg sm:text-xl font-bold text-slate-800 leading-tight truncate w-full">{course.subjectName}</h4>
-                    <span className="text-xs sm:text-sm font-semibold text-blue-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
+                    <span className="text-xs sm:text-sm font-semibold text-indigo-600 mt-1">รหัสวิชา: {course.subjectCode}</span>
                   </div>
                   <button onClick={() => setClassToDelete(course)} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition shrink-0" title="ลบคลาส"><Trash2 size={16} className="sm:hidden" /><Trash2 size={18} className="hidden sm:block" /></button>
                 </div>
@@ -209,7 +209,7 @@ export default function TeacherDashboard() {
                 <span className="text-[10px] sm:text-xs text-slate-500 font-medium bg-white px-2 py-1 border border-slate-200 rounded">เกณฑ์: สายหลัง {course.lateThresholdMinutes || 15} นาที</span>
                 <button 
                   onClick={() => navigate(`/teacher/course/${course.id}`)} 
-                  className="text-blue-600 text-xs sm:text-sm font-bold flex items-center hover:text-blue-800 transition"
+                  className="text-indigo-600 text-xs sm:text-sm font-bold flex items-center hover:text-indigo-800 transition"
                 >
                   จัดการคลาส <ChevronRight size={14} className="sm:hidden ml-0.5"/><ChevronRight size={16} className="hidden sm:block ml-1"/>
                 </button>
@@ -224,7 +224,7 @@ export default function TeacherDashboard() {
       {/* Modal Create Class */}
       {showCreateClassModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl shadow-blue-900/10 relative p-8 sm:p-10 animate-in zoom-in-95 duration-200 border border-white/20">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl shadow-indigo-900/10 relative p-8 sm:p-10 animate-in zoom-in-95 duration-200 border border-white/20">
             <button 
               onClick={() => setShowCreateClassModal(false)} 
               className="absolute top-6 right-6 text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-all z-10"
@@ -233,7 +233,7 @@ export default function TeacherDashboard() {
             </button>
             
             <div className="mb-8">
-              <h3 className="text-2xl font-black bg-gradient-to-r from-blue-700 to-indigo-600 bg-clip-text text-transparent inline-block">สร้างคลาสใหม่</h3>
+              <h3 className="text-2xl font-black bg-gradient-to-r from-indigo-700 to-indigo-600 bg-clip-text text-transparent inline-block">สร้างคลาสใหม่</h3>
               <p className="text-slate-500 text-sm mt-1 font-medium">กรอกข้อมูลรายวิชาที่คุณต้องการเปิดสอน</p>
             </div>
             
@@ -247,7 +247,7 @@ export default function TeacherDashboard() {
                     placeholder="เช่น SP344"
                     value={newClass.subjectCode}
                     onChange={(e) => setNewClass({ ...newClass, subjectCode: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -257,7 +257,7 @@ export default function TeacherDashboard() {
                     placeholder="เช่น Software Engineering"
                     value={newClass.subjectName}
                     onChange={(e) => setNewClass({ ...newClass, subjectName: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
               </div>
@@ -271,7 +271,7 @@ export default function TeacherDashboard() {
                     placeholder="เช่น 21509"
                     value={newClass.room}
                     onChange={(e) => setNewClass({ ...newClass, room: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
@@ -279,7 +279,7 @@ export default function TeacherDashboard() {
                   <select
                     value={newClass.scheduleDay}
                     onChange={(e) => setNewClass({ ...newClass, scheduleDay: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
                   >
                     <option value="จันทร์">จันทร์</option>
                     <option value="อังคาร">อังคาร</option>
@@ -301,7 +301,7 @@ export default function TeacherDashboard() {
                     placeholder="เช่น 2567"
                     value={newClass.academicYear}
                     onChange={(e) => setNewClass({ ...newClass, academicYear: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
@@ -309,7 +309,7 @@ export default function TeacherDashboard() {
                   <select
                     value={newClass.termSemester}
                     onChange={(e) => setNewClass({ ...newClass, termSemester: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 appearance-none"
                   >
                     <option value="1">1</option>
                     <option value="2">2</option>
@@ -326,7 +326,7 @@ export default function TeacherDashboard() {
                     type="time"
                     value={newClass.startTime}
                     onChange={(e) => setNewClass({ ...newClass, startTime: e.target.value })}
-                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
@@ -335,7 +335,7 @@ export default function TeacherDashboard() {
                     type="time"
                     value={newClass.endTime}
                     onChange={(e) => setNewClass({ ...newClass, endTime: e.target.value })}
-                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
@@ -346,7 +346,7 @@ export default function TeacherDashboard() {
                     max="60"
                     value={newClass.lateThresholdMinutes}
                     onChange={(e) => setNewClass({ ...newClass, lateThresholdMinutes: parseInt(e.target.value) || 15 })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700"
                   />
                 </div>
                 <div>
@@ -358,7 +358,7 @@ export default function TeacherDashboard() {
                     placeholder="ไม่มีกำหนด"
                     value={newClass.maxAbsences}
                     onChange={(e) => setNewClass({ ...newClass, maxAbsences: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 placeholder:text-slate-400 placeholder:font-normal"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/50 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white hover:border-slate-300 transition-all font-medium text-slate-700 placeholder:text-slate-400 placeholder:font-normal"
                   />
                 </div>
               </div>
@@ -367,7 +367,7 @@ export default function TeacherDashboard() {
             <button
               onClick={handleCreateClass}
               disabled={saving}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold tracking-wide shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center text-[15px]"
+              className="w-full bg-gradient-to-r from-indigo-600 to-indigo-600 text-white py-4 rounded-xl font-bold tracking-wide shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center text-[15px]"
             >
               {saving ? <><Loader2 size={20} className="animate-spin mr-2" /> กำลังบันทึกข้อมูล...</> : 'ยืนยันสร้างคลาสเรียน'}
             </button>

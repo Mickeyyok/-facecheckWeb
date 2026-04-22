@@ -30,10 +30,10 @@ function ChangeMapView({ center }) {
 }
 
 const StatusBadge = ({ status }) => {
-  if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">✅ ตรงเวลา</span>;
-  if (status === 'late') return <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">⚠️ สาย</span>;
-  if (status === 'absent') return <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 border border-red-200">❌ ขาดเรียน</span>;
-  if (status === 'leave') return <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">📝 ลา</span>;
+  if (status === 'present' || status === 'on_time') return <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 border border-green-200">ตรงเวลา</span>;
+  if (status === 'late') return <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">สาย</span>;
+  if (status === 'absent') return <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 border border-red-200">❌ขาดเรียน</span>;
+  if (status === 'leave') return <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">ลา</span>;
   return <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">- รอดำเนินการ</span>;
 };
 
@@ -742,7 +742,7 @@ export default function TeacherCourseDetail() {
               <button
                 key={tab.id}
                 onClick={() => setCourseSubTab(tab.id)}
-                className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium text-xs sm:text-sm rounded-t-lg transition flex items-center whitespace-nowrap shrink-0 ${courseSubTab === tab.id ? 'bg-white text-blue-700' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium text-xs sm:text-sm rounded-t-lg transition flex items-center whitespace-nowrap shrink-0 ${courseSubTab === tab.id ? 'bg-white text-indigo-700' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
               >
                 {tab.label}
                 {tab.badge > 0 && <span className="ml-1.5 sm:ml-2 bg-red-500 text-white text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full">{tab.badge}</span>}
@@ -759,9 +759,9 @@ export default function TeacherCourseDetail() {
             <div className="space-y-8 animate-in fade-in duration-300">
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-blue-600 shrink-0" size={18} /> ข้อมูลวิชาเบื้องต้น</h4>
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-indigo-600 shrink-0" size={18} /> ข้อมูลวิชาเบื้องต้น</h4>
                   {!isEditingCourseInfo ? (
-                    <button onClick={() => { setEditCourseForm(courseInfo); setIsEditingCourseInfo(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center">
+                    <button onClick={() => { setEditCourseForm(courseInfo); setIsEditingCourseInfo(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center">
                       <Edit size={14} className="mr-1.5" /> แก้ไขข้อมูล
                     </button>
                   ) : (
@@ -783,7 +783,7 @@ export default function TeacherCourseDetail() {
                         } catch (error) {
                           showError("บันทึกข้อมูลไม่สำเร็จ", error.response?.data?.message || error.message);
                         }
-                      }} className="text-sm bg-blue-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm flex items-center"><CheckCircle size={14} className="mr-1.5" /> บันทึก</button>
+                      }} className="text-sm bg-indigo-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm flex items-center"><CheckCircle size={14} className="mr-1.5" /> บันทึก</button>
                     </div>
                   )}
                 </div>
@@ -804,7 +804,7 @@ export default function TeacherCourseDetail() {
                           <label className="text-slate-500 block mb-1.5 text-xs font-bold uppercase tracking-wide">
                             {field === 'name' ? 'ชื่อวิชา' : field === 'code' ? 'รหัสวิชา' : field === 'instructor' ? 'ชื่ออาจารย์' : 'ห้องเรียน'}
                           </label>
-                          <input type="text" value={editCourseForm[field]} onChange={(e) => setEditCourseForm({ ...editCourseForm, [field]: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm" />
+                          <input type="text" value={editCourseForm[field]} onChange={(e) => setEditCourseForm({ ...editCourseForm, [field]: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm" />
                         </div>
                       ))}
                       <div>
@@ -820,7 +820,7 @@ export default function TeacherCourseDetail() {
                               const t = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1';
                               setEditCourseForm({ ...editCourseForm, term: `${e.target.value} / ${t}` });
                             }} 
-                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm" 
+                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm" 
                           />
                           <select 
                             value={editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[1] : '1'} 
@@ -828,7 +828,7 @@ export default function TeacherCourseDetail() {
                               const y = editCourseForm.term && editCourseForm.term.includes(' / ') ? editCourseForm.term.split(' / ')[0] : '';
                               setEditCourseForm({ ...editCourseForm, term: `${y} / ${e.target.value}` });
                             }} 
-                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-800 shadow-sm"
+                            className="w-1/2 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-800 shadow-sm"
                           >
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -843,8 +843,8 @@ export default function TeacherCourseDetail() {
 
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-blue-600 shrink-0" size={18} /> กำหนดเวลาและวันที่เช็คชื่อ</h4>
-                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm w-full sm:w-auto text-center">แก้ไขเวลา</button>
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><Clock className="mr-2 text-indigo-600 shrink-0" size={18} /> กำหนดเวลาและวันที่เช็คชื่อ</h4>
+                  <button onClick={() => { setEditTimeForm(courseTimeSettings); setShowSetTimeModal(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm w-full sm:w-auto text-center">แก้ไขเวลา</button>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
@@ -943,8 +943,8 @@ export default function TeacherCourseDetail() {
 
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-blue-600 shrink-0" size={18} /> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
-                  <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center"><Target size={14} className="mr-1.5" /> ตั้งค่าพิกัด</button>
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 flex items-center"><MapPin className="mr-2 text-indigo-600 shrink-0" size={18} /> กำหนดพิกัดและพื้นที่เช็กชื่อ</h4>
+                  <button onClick={() => { setEditLocationForm(locationSettings); setShowSetLocationModal(true); }} className="text-sm bg-indigo-50 text-indigo-600 font-bold px-4 py-2 rounded-lg hover:bg-indigo-100 transition shadow-sm flex items-center w-full sm:w-auto justify-center"><Target size={14} className="mr-1.5" /> ตั้งค่าพิกัด</button>
                 </div>
                 <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 sm:gap-6 items-center shadow-sm">
                   <div className="w-full md:w-1/3 h-48 sm:h-56 rounded-xl overflow-hidden shadow-inner border border-slate-300 relative z-0">
@@ -991,7 +991,7 @@ export default function TeacherCourseDetail() {
                           {locationSettings.lat && locationSettings.lng ? `${locationSettings.lat}, ${locationSettings.lng}` : 'ยังไม่ได้ตั้งค่า'}
                         </p>
                       </div>
-                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-blue-600 bg-blue-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
+                      <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">ระยะที่อนุญาต</span><p className="font-bold text-indigo-600 bg-indigo-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">รัศมี {locationSettings.radius} เมตร</p></div>
                       <div><span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wide">เกณฑ์การขาดเรียน</span><p className="font-bold text-rose-600 bg-rose-100 px-2 sm:px-2.5 py-0.5 rounded-md mt-0.5 inline-block text-sm sm:text-base">ขาดได้ไม่เกิน {maxAbsences} ครั้ง</p></div>
                     </div>
                   </div>
@@ -1023,7 +1023,7 @@ export default function TeacherCourseDetail() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
                 <div><h4 className="font-bold text-slate-800 text-base sm:text-lg">รายชื่อนักศึกษาทั้งหมด</h4><p className="text-xs sm:text-sm text-slate-500 mt-1">จำนวน {studentList.length} คน</p></div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                  <button onClick={() => { setAddStudentId(''); setAddStudentError(''); setAddStudentSuccess(''); setShowAddStudentModal(true); }} className="text-sm bg-blue-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Plus size={15} /> เพิ่มรายชื่อ</button>
+                  <button onClick={() => { setAddStudentId(''); setAddStudentError(''); setAddStudentSuccess(''); setShowAddStudentModal(true); }} className="text-sm bg-indigo-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-indigo-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Plus size={15} /> เพิ่มรายชื่อ</button>
                   <button onClick={() => { resetCsvModal(); setShowCsvModal(true); }} className="text-sm bg-emerald-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 shrink-0 flex-1 sm:flex-none flex items-center justify-center gap-1.5"><Upload size={15} /> นำเข้า CSV</button>
                 </div>
               </div>
@@ -1068,8 +1068,8 @@ export default function TeacherCourseDetail() {
                 <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-12 text-center">
                   <Calendar size={36} className="mx-auto text-slate-300 mb-3 sm:mb-4" />
                   <p className="font-bold text-slate-600 text-base sm:text-lg">ยังไม่มีวันที่เปิดให้เช็คชื่อ</p>
-                  <p className="text-slate-500 text-xs sm:text-sm mt-2">ไปที่ Tab <span className="font-bold text-blue-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
-                  <button onClick={() => setCourseSubTab('info')} className="mt-4 sm:mt-5 bg-blue-600 text-white font-bold px-5 sm:px-6 py-2.5 rounded-xl hover:bg-blue-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-2">ไปที่ Tab <span className="font-bold text-indigo-600">"ข้อมูลวิชา"</span> แล้วกด "สร้างตารางอัตโนมัติ" เพื่อกำหนดวันเช็คชื่อก่อน</p>
+                  <button onClick={() => setCourseSubTab('info')} className="mt-4 sm:mt-5 bg-indigo-600 text-white font-bold px-5 sm:px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition shadow-sm text-sm">ไปกำหนดวันเช็คชื่อ</button>
                 </div>
               ) : (<>
                 <div className="bg-slate-50 p-3 sm:p-5 rounded-xl border border-slate-200">
@@ -1143,7 +1143,7 @@ export default function TeacherCourseDetail() {
                 )}
 
                 {loadingDaily ? (
-                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto"></div><p className="text-slate-500 text-sm mt-3 font-medium">กำลังโหลดข้อมูล...</p></div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full mx-auto"></div><p className="text-slate-500 text-sm mt-3 font-medium">กำลังโหลดข้อมูล...</p></div>
                 ) : dailyStudentRows.length === 0 ? (
                   <div className="bg-white rounded-xl border border-slate-200 p-8 text-center"><Users size={32} className="mx-auto text-slate-300 mb-3" /><p className="font-bold text-slate-500">ยังไม่มีนักศึกษาในคลาสนี้</p></div>
                 ) : (
@@ -1158,7 +1158,7 @@ export default function TeacherCourseDetail() {
                         { key: 'leave', label: 'ลา', count: dailyStats.leave, color: 'orange' },
                         { key: 'pending', label: 'รอดำเนินการ', count: dailyStats.pending, color: 'gray' },
                       ].map(f => (
-                        <button key={f.key} onClick={() => setDailyFilter(f.key)} className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${dailyFilter === f.key ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300' : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300' : f.color === 'orange' ? 'bg-orange-50 text-orange-600 border-orange-300' : f.color === 'gray' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <button key={f.key} onClick={() => setDailyFilter(f.key)} className={`text-xs font-bold px-3.5 py-2 rounded-lg transition border ${dailyFilter === f.key ? f.color === 'green' ? 'bg-green-50 text-green-700 border-green-300' : f.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' : f.color === 'red' ? 'bg-red-50 text-red-600 border-red-300' : f.color === 'orange' ? 'bg-orange-50 text-orange-600 border-orange-300' : f.color === 'gray' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-indigo-50 text-indigo-700 border-indigo-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
                           {f.label} <span className="ml-1 opacity-70">({f.count})</span>
                         </button>
                       ))}
@@ -1198,11 +1198,11 @@ export default function TeacherCourseDetail() {
           {/* TAB 4: สถิติรายเทอม */}
           {courseSubTab === 'term' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
+              <div className="bg-gradient-to-r from-indigo-50 to-indigo-50 rounded-2xl border border-indigo-100 p-4 sm:p-6 shadow-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500 opacity-5 rounded-full blur-3xl pointer-events-none group-hover:opacity-10 transition-opacity"></div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-indigo-200/50 pb-4 relative z-10">
                   <div className="flex items-center space-x-2 sm:space-x-3"><div className="bg-white p-2 sm:p-2.5 rounded-xl text-indigo-600 shadow-sm border border-indigo-100 shrink-0"></div><h4 className="text-base sm:text-xl font-extrabold text-indigo-950">สรุปภาพรวมทั้งเทอม</h4></div>
-                  <span className="flex items-center bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-[10px] sm:text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full shadow-md self-start sm:self-auto shrink-0"><Brain size={12} className="mr-1 sm:hidden" /><Brain size={14} className="mr-1.5 hidden sm:block" /> วิเคราะห์โดย AI</span>
+                  <span className="flex items-center bg-gradient-to-r from-indigo-600 to-indigo-600 text-white text-[10px] sm:text-xs font-bold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full shadow-md self-start sm:self-auto shrink-0"><Brain size={12} className="mr-1 sm:hidden" /><Brain size={14} className="mr-1.5 hidden sm:block" /> วิเคราะห์โดย AI</span>
                 </div>
                 {loadingTerm ? (
                   <p className="text-indigo-600 text-sm font-medium animate-pulse">กำลังวิเคราะห์ข้อมูลการเข้าเรียน...</p>
@@ -1215,7 +1215,7 @@ export default function TeacherCourseDetail() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
-                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-blue-600" /> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
+                  <h4 className="font-bold text-slate-800 flex items-center mb-4"><BarChart2 size={18} className="mr-2 text-indigo-600" /> นักศึกษาที่ขาดเรียนสะสมสูงสุด</h4>
                   {loadingTerm ? (
                     <p className="text-sm text-slate-500 mt-4">กำลังโหลดข้อมูล...</p>
                   ) : (
@@ -1258,17 +1258,17 @@ export default function TeacherCourseDetail() {
             <button onClick={() => setShowSetTimeModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">กำหนดเวลาและเกณฑ์</h3>
             <div className="space-y-3 mb-6">
-              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({ ...editTimeForm, start: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({ ...editTimeForm, late: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน (หลังจากเวลา / เลิกคลาส)</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({ ...editTimeForm, absent: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+              <div><label className="block text-xs font-bold text-green-600 mb-1">ตรงเวลา (เริ่มคลาส)</label><input type="time" value={editTimeForm.start} onChange={(e) => setEditTimeForm({ ...editTimeForm, start: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-yellow-600 mb-1">สาย (หลังจากเวลา)</label><input type="time" value={editTimeForm.late} onChange={(e) => setEditTimeForm({ ...editTimeForm, late: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-red-600 mb-1">ขาดเรียน (หลังจากเวลา / เลิกคลาส)</label><input type="time" value={editTimeForm.absent} onChange={(e) => setEditTimeForm({ ...editTimeForm, absent: e.target.value })} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               
               <div className="pt-2 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-700 mb-1">ขาดเรียนได้สูงสุด (ครั้ง)</label>
-                <input type="number" min="1" max="99" placeholder="ไม่มีกำหนด" value={editMaxAbsences} onChange={(e) => setEditMaxAbsences(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-normal" />
+                <input type="number" min="1" max="99" placeholder="ไม่มีกำหนด" value={editMaxAbsences} onChange={(e) => setEditMaxAbsences(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 placeholder:font-normal" />
                 <p className="text-[10px] text-slate-500 mt-1">AI จะแจ้งเตือนนักศึกษาเมื่อขาดเรียนใกล้หรือเกินเกณฑ์นี้</p>
               </div>
             </div>
-            <button onClick={handleSaveTimeSettings} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 shadow-md">บันทึกการตั้งค่า</button>
+            <button onClick={handleSaveTimeSettings} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 shadow-md">บันทึกการตั้งค่า</button>
           </div>
         </div>
       )}
@@ -1277,24 +1277,24 @@ export default function TeacherCourseDetail() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative p-6 md:p-8 animate-in zoom-in-95">
             <button onClick={() => setShowSetLocationModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><XCircle size={24} /></button>
-            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center"><Target className="mr-2 text-blue-600" size={22} /> ตั้งค่าพิกัดเช็กชื่อ</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center"><Target className="mr-2 text-indigo-600" size={22} /> ตั้งค่าพิกัดเช็กชื่อ</h3>
             <p className="text-sm text-slate-500 mb-6">กำหนดพื้นที่ที่อนุญาตให้นักศึกษาสามารถสแกนใบหน้าได้</p>
             <div className="space-y-4 mb-6">
-              <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">ชื่อสถานที่ / อาคาร</label><input type="text" value={editLocationForm.name} onChange={(e) => setEditLocationForm({ ...editLocationForm, name: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium" /></div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">ชื่อสถานที่ / อาคาร</label><input type="text" value={editLocationForm.name} onChange={(e) => setEditLocationForm({ ...editLocationForm, name: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Latitude</label><input type="text" value={editLocationForm.lat} onChange={(e) => setEditLocationForm({ ...editLocationForm, lat: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium font-mono" /></div>
-                <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Longitude</label><input type="text" value={editLocationForm.lng} onChange={(e) => setEditLocationForm({ ...editLocationForm, lng: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium font-mono" /></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Latitude</label><input type="text" value={editLocationForm.lat} onChange={(e) => setEditLocationForm({ ...editLocationForm, lat: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium font-mono" /></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Longitude</label><input type="text" value={editLocationForm.lng} onChange={(e) => setEditLocationForm({ ...editLocationForm, lng: e.target.value })} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium font-mono" /></div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide flex justify-between"><span>ระยะรัศมีที่อนุญาต</span><span className="text-blue-600">{editLocationForm.radius} เมตร</span></label>
-                <input type="range" min="10" max="500" step="10" value={editLocationForm.radius} onChange={(e) => setEditLocationForm({ ...editLocationForm, radius: e.target.value })} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide flex justify-between"><span>ระยะรัศมีที่อนุญาต</span><span className="text-indigo-600">{editLocationForm.radius} เมตร</span></label>
+                <input type="range" min="10" max="500" step="10" value={editLocationForm.radius} onChange={(e) => setEditLocationForm({ ...editLocationForm, radius: e.target.value })} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
               </div>
             </div>
             <div className="flex flex-col gap-3">
               <button onClick={handleSetLocation} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition flex items-center justify-center gap-2 shadow-sm"><Target size={18} /> ดึงพิกัดจากตำแหน่งปัจจุบัน (GPS)</button>
               <div className="flex space-x-3">
                 <button onClick={() => setShowSetLocationModal(false)} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 transition">ยกเลิก</button>
-                <button onClick={handleSaveManualLocation} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-md">บันทึกค่าที่แก้ไข</button>
+                <button onClick={handleSaveManualLocation} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md">บันทึกค่าที่แก้ไข</button>
               </div>
             </div>
           </div>
@@ -1323,7 +1323,7 @@ export default function TeacherCourseDetail() {
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/50">
 
             {/* Header Area with Gradient */}
-            <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-600 p-6 sm:p-8 text-white relative overflow-hidden">
+            <div className="bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-600 p-6 sm:p-8 text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/4"></div>
               <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-xl translate-y-1/2 -translate-x-1/4"></div>
 
@@ -1345,7 +1345,7 @@ export default function TeacherCourseDetail() {
                 </div>
                 <div>
                   <h3 className="text-xl font-extrabold tracking-wide">เพิ่มนักศึกษาเข้าคลาส</h3>
-                  <p className="text-blue-100 text-xs mt-1.5 font-medium opacity-90">ดึงข้อมูลจากระบบกลางเข้าสู่วิชานี้</p>
+                  <p className="text-indigo-100 text-xs mt-1.5 font-medium opacity-90">ดึงข้อมูลจากระบบกลางเข้าสู่วิชานี้</p>
                 </div>
               </div>
             </div>
@@ -1372,8 +1372,8 @@ export default function TeacherCourseDetail() {
                   รหัสนักศึกษา (13 หลัก) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-600">
-                    <Search className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-indigo-600">
+                    <Search className="text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
                   </div>
                   <input
                     type="text"
@@ -1385,7 +1385,7 @@ export default function TeacherCourseDetail() {
                       if (addStudentError) setAddStudentError(''); // ซ่อน error ทันทีที่เริ่มพิมพ์ใหม่
                     }}
                     maxLength={13}
-                    className={`w-full pl-12 pr-4 py-4 border rounded-2xl outline-none text-sm font-mono tracking-widest text-slate-800 bg-white transition-all shadow-sm font-bold focus:ring-4 ${addStudentError ? 'border-rose-300 focus:ring-rose-50 focus:border-rose-400' : 'border-slate-200 focus:ring-blue-50 focus:border-blue-400'}`}
+                    className={`w-full pl-12 pr-4 py-4 border rounded-2xl outline-none text-sm font-mono tracking-widest text-slate-800 bg-white transition-all shadow-sm font-bold focus:ring-4 ${addStudentError ? 'border-rose-300 focus:ring-rose-50 focus:border-rose-400' : 'border-slate-200 focus:ring-indigo-50 focus:border-indigo-400'}`}
                   />
                 </div>
                 <div className="flex items-start mt-3 ml-1">
@@ -1411,7 +1411,7 @@ export default function TeacherCourseDetail() {
                 <button
                   onClick={handleAddStudent}
                   disabled={addingStudent || addStudentId.length < 10}
-                  className="flex-[2] relative px-4 py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all shadow-[0_8px_20px_rgb(147,51,234,0.25)] hover:shadow-[0_8px_25px_rgb(147,51,234,0.35)] hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none overflow-hidden flex items-center justify-center text-sm group/btn"
+                  className="flex-[2] relative px-4 py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-600 hover:from-indigo-700 hover:to-indigo-700 transition-all shadow-[0_8px_20px_rgb(147,51,234,0.25)] hover:shadow-[0_8px_25px_rgb(147,51,234,0.35)] hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none overflow-hidden flex items-center justify-center text-sm group/btn"
                 >
                   <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite]"></div>
 

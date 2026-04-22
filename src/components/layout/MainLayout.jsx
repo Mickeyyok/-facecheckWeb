@@ -41,7 +41,7 @@ export default function MainLayout({ role }) {
   }, [user, location.pathname]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-blue-100">
+    <div className="min-h-screen bg-slate-50 flex font-sans selection:bg-indigo-100">
       
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
@@ -97,7 +97,7 @@ export default function MainLayout({ role }) {
           >
             <div className="flex items-center space-x-3">
               {role === 'teacher' ? (
-                <><Brain size={20} className="text-blue-400" /><span>AI ผู้ช่วยวิเคราะห์</span></>
+                <><Brain size={20} className="text-indigo-400" /><span>AI ผู้ช่วยวิเคราะห์</span></>
               ) : (
                 <><Bell size={20} /><span>การแจ้งเตือน</span></>
               )}
@@ -139,7 +139,7 @@ export default function MainLayout({ role }) {
             <button className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg mr-1 transition-colors" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu size={24} />
             </button>
-            <div className={`hidden sm:flex p-2 rounded-lg ${role === 'student' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+            <div className={`hidden sm:flex p-2 rounded-lg ${role === 'student' ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'}`}>
                {role === 'student' ? <BookOpen size={20} /> : <Users size={20} />}
             </div>
             <h2 className="text-lg lg:text-xl font-bold text-slate-800 capitalize tracking-tight truncate max-w-[150px] sm:max-w-none">
@@ -167,7 +167,7 @@ export default function MainLayout({ role }) {
                   {role} Account
                 </span>
               </div>
-              <div className={`w-8 h-8 lg:w-10 lg:h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm border border-white shrink-0 ${role === 'student' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+              <div className={`w-8 h-8 lg:w-10 lg:h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm border border-white shrink-0 ${role === 'student' ? 'bg-blue-600' : 'bg-indigo-600'}`}>
                 {(user?.fullName || user?.name || 'U')[0].toUpperCase()}
               </div>
             </div>

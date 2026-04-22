@@ -128,9 +128,9 @@ export default function LeaveRequests() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
-                        isSick ? 'bg-rose-50' : 'bg-blue-50'
+                        isSick ? 'bg-rose-50' : 'bg-indigo-50'
                       }`}>
-                        {isSick ? <AlertTriangle size={20} className="text-rose-500" /> : <FileText size={20} className="text-blue-500" />}
+                        {isSick ? <AlertTriangle size={20} className="text-rose-500" /> : <FileText size={20} className="text-indigo-500" />}
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 text-[15px]">{lr.studentName}</h4>
@@ -139,7 +139,7 @@ export default function LeaveRequests() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${
-                        isSick ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-blue-50 text-blue-600 border-blue-200'
+                        isSick ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'
                       }`}>
                         {isSick ? 'ลาป่วย' : 'ลากิจ'}
                       </span>
@@ -148,7 +148,7 @@ export default function LeaveRequests() {
                         isApproved ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                         'bg-rose-50 text-rose-600 border-rose-200'
                       }`}>
-                        {isPending ? 'รออนุมัติ' : isApproved ? 'อนุมัติแล้ว' : <><XCircle size={12} className="mr-1" /> ปฏิเสธแล้ว</>}
+                        {isPending ? 'รออนุมัติ' : isApproved ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'}
                       </span>
                     </div>
                   </div>

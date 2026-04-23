@@ -7,7 +7,7 @@ import StudentCourses from './pages/student/StudentCourses';
 import StudentHistory from './pages/student/StudentHistory';
 import FaceRegistration from './pages/student/FaceRegistration';
 
-// ✅ ใช้ชื่อ Component ใหม่ที่สื่อถึง Teacher
+// ใช้ชื่อ Component ใหม่ที่สื่อถึง Teacher
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherCourseDetail from './pages/teacher/TeacherCourseDetail';
 import LeaveRequests from './pages/teacher/LeaveRequests';
@@ -32,7 +32,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* ✅ กลุ่มหน้าของ อาจารย์ (เปลี่ยนเป็น teacher ทั้งหมด) */}
+      {/* กลุ่มหน้าของ อาจารย์ (เปลี่ยนเป็น teacher ทั้งหมด) */}
       <Route element={<ProtectedRoute allowedRole="teacher" />}>
         <Route path="/teacher" element={<MainLayout role="teacher" />}>
           <Route index element={<Navigate to="dashboard" replace />} />

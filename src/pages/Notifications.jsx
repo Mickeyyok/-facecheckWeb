@@ -161,7 +161,7 @@ export default function Notifications({ role }) {
       const top5 = [...stats].sort((a, b) => b.absentCount - a.absentCount).slice(0, 5);
       const coursesInvolved = [...new Set(stats.map(s => s.courseCode + ' ' + s.courseName))].join(', ');
       const prompt = `คุณคือผู้เชี่ยวชาญด้านการศึกษา วิเคราะห์ข้อมูลการเข้าเรียนของนักศึกษาแล้วให้รายงานเป็นภาษาไทย:\n\nรายวิชาที่วิเคราะห์: ${coursesInvolved}\nสรุปข้อมูล:\n- จำนวนนักศึกษาทั้งหมด: ${stats.length} คน\n- ค่าเฉลี่ยการเข้าเรียน: ${avgAtt}%\n- นักศึกษาที่มีความเสี่ยง: ${riskStudents.length} คน\n- นักศึกษาเข้าเรียนดี (>=90%): ${stats.filter(s => s.attendancePercent >= 90).length} คน\n\nนักศึกษาขาดเรียนมากที่สุด 5 อันดับ:\n${top5.map((s, i) => `${i + 1}. ${s.name} (${s.studentId}) - ${s.courseName} - ขาด ${s.absentCount} ครั้ง, เข้าเรียน ${s.attendancePercent}%`).join('\n')}\n\nตอบในรูปแบบ JSON เท่านั้น (ไม่ต้องใส่ markdown):\n{\n  "overallSummary": "สรุปภาพรวม 2-3 ประโยค",\n  "riskLevel": "ต่ำ หรือ ปานกลาง หรือ สูง หรือ วิกฤต",\n  "keyInsights": ["insight 1", "insight 2", "insight 3"],\n  "recommendations": ["คำแนะนำ 1", "คำแนะนำ 2", "คำแนะนำ 3"],\n  "urgentActions": "สิ่งที่ควรทำทันทีในประโยคเดียว หรือ null ถ้าไม่มี"\n}`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1024 } })
       });

@@ -140,7 +140,7 @@ const FaceRegistration = () => {
       </div>
 
       <p className="text-xl font-semibold text-blue-600 mb-4 animate-pulse">
-        👉 {poseTexts[poses[currentPoseIndex]]}
+         {poseTexts[poses[currentPoseIndex]]}
       </p>
 
       <div

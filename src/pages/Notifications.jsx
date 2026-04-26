@@ -150,12 +150,55 @@ export default function Notifications({ role }) {
   };
 
 
-  // Gemini AI Analysis
+  // ─── Local Fallback Analysis (ไม่ต้องพึ่ง API) ───
+  const generateLocalAnalysis = (stats) => {
+    const riskStudents = stats.filter(s => s.isRisk);
+    const avgAtt = stats.length > 0 ? Math.round(stats.reduce((sum, s) => sum + s.attendancePercent, 0) / stats.length) : 0;
+    const goodStudents = stats.filter(s => s.attendancePercent >= 90).length;
+    const top5 = [...stats].sort((a, b) => b.absentCount - a.absentCount).slice(0, 5);
+    const coursesInvolved = [...new Set(stats.map(s => s.courseCode + ' ' + s.courseName))].join(', ');
+
+    // กำหนดระดับความเสี่ยง
+    const riskPercent = stats.length > 0 ? (riskStudents.length / stats.length) * 100 : 0;
+    let riskLevel = 'ต่ำ';
+    if (riskPercent >= 40 || avgAtt < 60) riskLevel = 'วิกฤต';
+    else if (riskPercent >= 25 || avgAtt < 70) riskLevel = 'สูง';
+    else if (riskPercent >= 10 || avgAtt < 80) riskLevel = 'ปานกลาง';
+
+    // สร้าง insights
+    const keyInsights = [];
+    if (riskStudents.length > 0) keyInsights.push(`มีนักศึกษาเสี่ยงหมดสิทธิ์สอบจำนวน ${riskStudents.length} คน จากทั้งหมด ${stats.length} คน (${Math.round(riskPercent)}%)`);
+    if (avgAtt < 80) keyInsights.push(`ค่าเฉลี่ยการเข้าเรียนอยู่ที่ ${avgAtt}% ซึ่งต่ำกว่าเกณฑ์ที่ควรจะเป็น (≥80%)`);
+    else keyInsights.push(`ค่าเฉลี่ยการเข้าเรียนอยู่ที่ ${avgAtt}% อยู่ในเกณฑ์ที่ดี`);
+    if (goodStudents > 0) keyInsights.push(`นักศึกษาที่เข้าเรียนดี (≥90%) มีจำนวน ${goodStudents} คน คิดเป็น ${Math.round((goodStudents / stats.length) * 100)}%`);
+    if (top5.length > 0) keyInsights.push(`นักศึกษาที่ขาดเรียนมากสุดคือ ${top5[0].name} ขาดเรียน ${top5[0].absentCount} ครั้ง (เข้าเรียน ${top5[0].attendancePercent}%)`);
+
+    // สร้างคำแนะนำ
+    const recommendations = [];
+    if (riskStudents.length > 0) recommendations.push(`ติดต่อนักศึกษากลุ่มเสี่ยง ${riskStudents.length} คน เป็นรายบุคคลเพื่อสอบถามสาเหตุการขาดเรียน`);
+    if (avgAtt < 80) recommendations.push('พิจารณาปรับวิธีการสอนหรือเพิ่มกิจกรรมมีส่วนร่วมเพื่อจูงใจให้นักศึกษาเข้าเรียนมากขึ้น');
+    recommendations.push('ตรวจสอบรายชื่อนักศึกษาเสี่ยงด้านล่างและส่งแจ้งเตือนรายบุคคลผ่านระบบ');
+    if (riskStudents.length >= 3) recommendations.push('จัดประชุมรวมกลุ่มนักศึกษาที่มีปัญหาเข้าเรียนเพื่อหาแนวทางแก้ไขร่วมกัน');
+
+    let urgentActions = null;
+    if (riskLevel === 'วิกฤต') urgentActions = `ส่งแจ้งเตือนด่วนถึงนักศึกษาเสี่ยง ${riskStudents.length} คนทันที และรายงานต่อฝ่ายวิชาการ`;
+    else if (riskLevel === 'สูง') urgentActions = `ติดต่อนักศึกษาเสี่ยง ${riskStudents.length} คนภายในสัปดาห์นี้เพื่อป้องกันการหมดสิทธิ์สอบ`;
+
+    return {
+      overallSummary: `จากการวิเคราะห์ข้อมูลรายวิชา ${coursesInvolved} พบว่ามีนักศึกษาทั้งหมด ${stats.length} คน ค่าเฉลี่ยการเข้าเรียนอยู่ที่ ${avgAtt}% โดยมีนักศึกษาเสี่ยง ${riskStudents.length} คนที่ต้องเฝ้าระวัง`,
+      riskLevel,
+      keyInsights: keyInsights.slice(0, 4),
+      recommendations: recommendations.slice(0, 4),
+      urgentActions
+    };
+  };
+
+  // Gemini AI Analysis (with Local Fallback)
   const callGeminiAnalysis = async (stats) => {
     setLoadingAi(true); setAiError(''); setAiAnalysis(null);
     try {
       const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!GEMINI_API_KEY) throw new Error('ไม่พบ GEMINI API Key ใน .env');
+      if (!GEMINI_API_KEY) throw new Error('NO_KEY');
       const riskStudents = stats.filter(s => s.isRisk);
       const avgAtt = stats.length > 0 ? Math.round(stats.reduce((sum, s) => sum + s.attendancePercent, 0) / stats.length) : 0;
       const top5 = [...stats].sort((a, b) => b.absentCount - a.absentCount).slice(0, 5);
@@ -171,7 +214,13 @@ export default function Notifications({ role }) {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('รูปแบบผลลัพธ์จาก AI ไม่ถูกต้อง');
       setAiAnalysis(JSON.parse(jsonMatch[0]));
-    } catch (err) { console.error('Gemini AI Error:', err); setAiError(err.message || 'ไม่สามารถเชื่อมต่อ AI ได้'); }
+    } catch (err) {
+      // ✅ Fallback: ถ้า Gemini ล้มเหลว ให้วิเคราะห์แบบ Local แทน
+      console.warn('Gemini API ล้มเหลว, ใช้ Local Analysis แทน:', err.message);
+      const localResult = generateLocalAnalysis(stats);
+      setAiAnalysis(localResult);
+      setAiError(''); // ล้าง error เพราะ fallback สำเร็จ
+    }
     finally { setLoadingAi(false); }
   };
 
@@ -500,7 +549,7 @@ export default function Notifications({ role }) {
         </div>
       )}
 
-      {/* Modal ส่งแจ้งเตือน AI (Teacher only) */}
+      {/* Modal ส่งแจ้งเตือน  (Teacher only) */}
       {showSendAlertModal && alertToSend && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl relative animate-in zoom-in-95 duration-200">

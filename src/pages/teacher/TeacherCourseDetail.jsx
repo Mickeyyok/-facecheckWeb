@@ -18,7 +18,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // ==========================================
-// 📑 Tab Components (แยกไฟล์ย่อยตาม Clean Architecture)
+//  Tab Components (แยกไฟล์ย่อยตาม Clean Architecture)
 // ==========================================
 import CourseInfoTab from './course-detail/CourseInfoTab';
 import StudentListTab from './course-detail/StudentListTab';
